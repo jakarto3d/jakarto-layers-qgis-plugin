@@ -1,0 +1,4 @@
+[tool.pyright]
+typeCheckingMode = "basic"
+reportInvalidTypeForm = "none"
+reportAssignmentType = "none"
