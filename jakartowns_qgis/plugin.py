@@ -174,9 +174,14 @@ class Plugin:
             iface.mapCanvas().refresh()
 
     def add_layer(self, value) -> None:
-        if self.layer_container.add_layer(self.get_selected_layer(value)):
+        layer_name = self.get_selected_layer(value)
+        if self.layer_container.add_layer(layer_name):
             self.on_item_selection_changed()
             iface.mapCanvas().refresh()
+
+        layer = self.layer_container.get_layer(layer_name)
+        if layer is not None:
+            iface.setActiveLayer(layer.qgis_layer)
 
     def remove_layer(self) -> None:
         if self.layer_container.remove_layer(self.get_selected_layer()):

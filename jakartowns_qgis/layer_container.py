@@ -26,7 +26,7 @@ class LayerContainer:
         }
 
     def is_loaded(self, id_or_name: str) -> bool:
-        layer = self._get_layer(id_or_name)
+        layer = self.get_layer(id_or_name)
         if layer is None:
             return False
         return layer.source_id in self._loaded_layers
@@ -34,7 +34,7 @@ class LayerContainer:
     def all_layer_names(self) -> list[str]:
         return list(self._layer_name_to_source_id.keys())
 
-    def _get_layer(self, id_or_name_or_qgis_id: str | None) -> Layer | None:
+    def get_layer(self, id_or_name_or_qgis_id: str | None) -> Layer | None:
         if id_or_name_or_qgis_id is None:
             return None
         if id_or_name_or_qgis_id in self._all_layers:
@@ -48,7 +48,7 @@ class LayerContainer:
         return None
 
     def add_layer(self, id_or_name: str | None) -> bool:
-        if not (layer := self._get_layer(id_or_name)):
+        if not (layer := self.get_layer(id_or_name)):
             return False
         if layer.source_id in self._loaded_layers:
             return False
@@ -63,7 +63,7 @@ class LayerContainer:
         return True
 
     def remove_layer(self, id_or_name: str | None) -> bool:
-        if not (layer := self._get_layer(id_or_name)):
+        if not (layer := self.get_layer(id_or_name)):
             return False
         if layer.source_id not in self._loaded_layers:
             return False
