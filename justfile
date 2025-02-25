@@ -11,3 +11,6 @@ venv:
 
     echo "Activate the venv with: "
     echo ". .venv/bin/activate"
+
+compile:
+    pyrcc5 jakartowns_qgis/ui/resources.qrc -o jakartowns_qgis/ui/resources_rc.py

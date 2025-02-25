@@ -1,16 +1,21 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Callable
 
-from qgis.core import QgsVectorLayer, QgsDataSourceUri
+from qgis.core import QgsDataSourceUri, QgsProject, QgsVectorLayer
 from qgis.gui import QgisInterface
-from qgis.PyQt.QtCore import QCoreApplication, QTranslator
+from qgis.PyQt.QtCore import QCoreApplication, Qt, QTranslator
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction, QWidget
+from qgis.PyQt.QtWidgets import QAction, QListWidgetItem, QWidget
 from qgis.utils import iface
-from qgis.core import QgsProject
+
+from .layers import LayerContainer
+from .ui.main_panel import MainPanel
 
 iface: QgisInterface
+
+HERE = Path(__file__).parent
 
 
 class Plugin:
@@ -21,18 +26,24 @@ class Plugin:
     def __init__(self) -> None:
         self.actions: list[QAction] = []
         self.menu = Plugin.name
+        self.toolbar = None
+        self._panel = None
+        self._layer_container = LayerContainer()
 
-        self.layers = []
+    @property
+    def panel(self) -> MainPanel:
+        if self._panel is None:
+            raise RuntimeError("Panel is not loaded")
+        return self._panel
 
     def add_action(
         self,
-        icon_path: str,
+        icon_path: str | Path,
         text: str,
         callback: Callable,
         *,
         enabled_flag: bool = True,
         add_to_menu: bool = True,
-        add_to_toolbar: bool = True,
         status_tip: str | None = None,
         whats_this: str | None = None,
         parent: QWidget | None = None,
@@ -68,7 +79,7 @@ class Plugin:
         :rtype: QAction
         """
 
-        icon = QIcon(icon_path)
+        icon = QIcon(str(icon_path))
         action = QAction(icon, text, parent)
         action.triggered.connect(callback)
         action.setEnabled(enabled_flag)
@@ -79,9 +90,6 @@ class Plugin:
         if whats_this is not None:
             action.setWhatsThis(whats_this)
 
-        if add_to_toolbar:
-            iface.addToolBarIcon(action)
-
         if add_to_menu:
             iface.addPluginToMenu(self.menu, action)
 
@@ -90,24 +98,69 @@ class Plugin:
         return action
 
     def initGui(self) -> None:  # noqa N802
-        """Create the menu entries and toolbar icons inside the QGIS GUI."""
-        self.add_action(
-            "",
+        self._panel = MainPanel()
+        self.toolbar = iface.addToolBar("Jakarto Layers")
+        self.toolbar.setObjectName("JakartoLayers")
+
+        self.panel.layerList.itemSelectionChanged.connect(
+            self.on_item_selection_changed
+        )
+        self.panel.layerList.itemDoubleClicked.connect(self.add_layer)
+        self.panel.layerAdd.clicked.connect(self.add_layer)
+        self.panel.layerRemove.clicked.connect(self.remove_layer)
+        action = self.add_action(
+            ":/resources/icons/layer-solid-36.png",
             text=Plugin.name,
             callback=self.run,
             parent=iface.mainWindow(),
-            add_to_toolbar=True,
         )
+        self.toolbar.addAction(action)
 
     def onClosePlugin(self) -> None:  # noqa N802
         """Cleanup necessary items here when plugin dockwidget is closed"""
 
     def unload(self) -> None:
         """Removes the plugin menu item and icon from QGIS GUI."""
+        if self._panel:
+            self._panel.close()
+            self._panel = None
+
+        if self.toolbar:
+            iface.mainWindow().removeToolBar(self.toolbar)
+            self.toolbar = None
+
         for action in self.actions:
             iface.removePluginMenu(Plugin.name, action)
-            iface.removeToolBarIcon(action)
+
+        self._layer_container.remove_all_layers()
 
     def run(self) -> None:
-        """Run method that performs all the real work"""
-        pass
+        iface.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.panel)
+
+        layers = self._layer_container.load_layers()
+
+        self.panel.layerList.clear()
+        self.panel.layerList.addItems(layers)
+
+    def get_selected_layer(self, value=None) -> str | None:
+        if value is not None and hasattr(value, "text"):
+            return value.text()
+        current = self.panel.layerList.currentItem()
+        return current.text() if current else None
+
+    def on_item_selection_changed(self) -> None:
+        add_enabled, remove_enabled = True, True
+        if layer_name := self.get_selected_layer():
+            add_enabled = layer_name not in self._layer_container.layers
+            remove_enabled = layer_name in self._layer_container.layers
+
+        self.panel.layerAdd.setEnabled(add_enabled)
+        self.panel.layerRemove.setEnabled(remove_enabled)
+
+    def add_layer(self, value) -> None:
+        self._layer_container.add_layer(self.get_selected_layer(value))
+        self.on_item_selection_changed()
+
+    def remove_layer(self) -> None:
+        self._layer_container.remove_layer(self.get_selected_layer())
+        self.on_item_selection_changed()
