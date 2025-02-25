@@ -3,15 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable
 
-from qgis.core import QgsDataSourceUri, QgsProject, QgsVectorLayer
+from qgis.core import QgsProject
 from qgis.gui import QgisInterface
-from qgis.PyQt.QtCore import QCoreApplication, Qt, QTranslator
+from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction, QListWidgetItem, QWidget
+from qgis.PyQt.QtWidgets import QAction, QWidget
 from qgis.utils import iface
 
 from .layer_container import LayerContainer
-from .postgrest import Postgrest
 from .ui.main_panel import MainPanel
 
 iface: QgisInterface
