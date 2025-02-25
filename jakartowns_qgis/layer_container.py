@@ -18,8 +18,8 @@ class LayerContainer:
 
     def fetch_layers(self) -> None:
         self._all_layers = {
-            id_: Layer(name, id_, geometry_type)
-            for name, id_, geometry_type in self._postgrest_client.get_layers()
+            id_: Layer(name, id_, geometry_type, attributes)
+            for name, id_, geometry_type, attributes in self._postgrest_client.get_layers()
         }
         self._layer_name_to_source_id = {
             layer.name: layer.source_id for layer in self._all_layers.values()
