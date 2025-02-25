@@ -28,14 +28,18 @@ class Postgrest:
         self._session: requests.Session | None = None
         self._session_time = time.time()
 
-        self.get_token()
-
-    def get_layers(self) -> list[tuple[str, str, str]]:
+    def get_layers(self) -> list[tuple]:
         response = self._get("layers")
-        return [
-            (layer["name"], layer["id"], layer["geometry_type"])
+        layers = [
+            (
+                layer["name"],
+                layer["id"],
+                layer["geometry_type"],
+                layer["attributes"],
+            )
             for layer in response.json()
         ]
+        return sorted(layers, key=lambda x: x[0])
 
     def get_features(
         self, geometry_type: str, layer_id: str, params: dict[str, Any] | None = None
@@ -73,9 +77,10 @@ class Postgrest:
         if self._session is None:
             self._session = requests.Session()
             self._session_time = time.time()
+            self._get_token()
         return self._session
 
-    def get_token(self) -> None:
+    def _get_token(self) -> None:
         if not self._refresh_token:
             json_data = {"email": "someone@jakarto.com", "password": "password"}
             params = {"grant_type": "password"}
