@@ -10,7 +10,7 @@ from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QListWidgetItem, QWidget
 from qgis.utils import iface
 
-from .layers import LayerContainer
+from .layer_container import LayerContainer
 from .ui.main_panel import MainPanel
 
 iface: QgisInterface
@@ -110,7 +110,7 @@ class Plugin:
         self.panel.layerRemove.clicked.connect(self.remove_layer)
         action = self.add_action(
             ":/resources/icons/layer-solid-36.png",
-            text=Plugin.name,
+            text="Jakarto Layers",
             callback=self.run,
             parent=iface.mainWindow(),
         )
@@ -140,7 +140,7 @@ class Plugin:
         layers = self._layer_container.load_layers()
 
         self.panel.layerList.clear()
-        self.panel.layerList.addItems(layers)
+        self.panel.layerList.addItems([layer.name for layer in layers])
 
     def get_selected_layer(self, value=None) -> str | None:
         if value is not None and hasattr(value, "text"):
