@@ -11,6 +11,7 @@ from qgis.PyQt.QtWidgets import QAction, QListWidgetItem, QWidget
 from qgis.utils import iface
 
 from .layer_container import LayerContainer
+from .postgrest import Postgrest
 from .ui.main_panel import MainPanel
 
 iface: QgisInterface
@@ -28,13 +29,20 @@ class Plugin:
         self.menu = Plugin.name
         self.toolbar = None
         self._panel = None
-        self._layer_container = LayerContainer()
+
+        self._layer_container = None
 
     @property
     def panel(self) -> MainPanel:
         if self._panel is None:
             raise RuntimeError("Panel is not loaded")
         return self._panel
+
+    @property
+    def layer_container(self) -> LayerContainer:
+        if self._layer_container is None:
+            self._layer_container = LayerContainer()
+        return self._layer_container
 
     def add_action(
         self,
@@ -108,6 +116,9 @@ class Plugin:
         self.panel.layerList.itemDoubleClicked.connect(self.add_layer)
         self.panel.layerAdd.clicked.connect(self.add_layer)
         self.panel.layerRemove.clicked.connect(self.remove_layer)
+
+        QgsProject.instance().layersRemoved.connect(self.on_layers_removed)
+
         action = self.add_action(
             ":/resources/icons/layer-solid-36.png",
             text="Jakarto Layers",
@@ -124,6 +135,8 @@ class Plugin:
         if self._panel:
             self._panel.close()
             self._panel = None
+        if self._layer_container:
+            self.layer_container.remove_all_layers()
 
         if self.toolbar:
             iface.mainWindow().removeToolBar(self.toolbar)
@@ -132,15 +145,13 @@ class Plugin:
         for action in self.actions:
             iface.removePluginMenu(Plugin.name, action)
 
-        self._layer_container.remove_all_layers()
-
     def run(self) -> None:
         iface.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.panel)
 
-        layers = self._layer_container.load_layers()
+        self.layer_container.fetch_layers()
 
         self.panel.layerList.clear()
-        self.panel.layerList.addItems([layer.name for layer in layers])
+        self.panel.layerList.addItems(self.layer_container.all_layer_names())
 
     def get_selected_layer(self, value=None) -> str | None:
         if value is not None and hasattr(value, "text"):
@@ -151,16 +162,24 @@ class Plugin:
     def on_item_selection_changed(self) -> None:
         add_enabled, remove_enabled = True, True
         if layer_name := self.get_selected_layer():
-            add_enabled = layer_name not in self._layer_container.layers
-            remove_enabled = layer_name in self._layer_container.layers
+            loaded = self.layer_container.is_loaded(layer_name)
+            add_enabled = not loaded
+            remove_enabled = loaded
 
         self.panel.layerAdd.setEnabled(add_enabled)
         self.panel.layerRemove.setEnabled(remove_enabled)
 
+    def on_layers_removed(self, removed_ids: list[str]) -> None:
+        if self.layer_container.on_layers_removed(removed_ids):
+            self.on_item_selection_changed()
+            iface.mapCanvas().refresh()
+
     def add_layer(self, value) -> None:
-        self._layer_container.add_layer(self.get_selected_layer(value))
-        self.on_item_selection_changed()
+        if self.layer_container.add_layer(self.get_selected_layer(value)):
+            self.on_item_selection_changed()
+            iface.mapCanvas().refresh()
 
     def remove_layer(self) -> None:
-        self._layer_container.remove_layer(self.get_selected_layer())
-        self.on_item_selection_changed()
+        if self.layer_container.remove_layer(self.get_selected_layer()):
+            self.on_item_selection_changed()
+            iface.mapCanvas().refresh()

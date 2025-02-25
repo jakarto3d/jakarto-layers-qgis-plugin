@@ -1,0 +1,2 @@
+# note: only add dependencies that are pre-installed in the qgis environment
+requests

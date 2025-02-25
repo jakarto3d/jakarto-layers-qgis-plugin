@@ -1,28 +1,68 @@
 from typing import Any, Iterable
 
-from qgis.core import QgsFeature, QgsField, QgsGeometry, QgsVectorLayer
+from qgis.core import QgsFeature, QgsField, QgsGeometry, QgsPointXY, QgsVectorLayer
 from qgis.PyQt.QtCore import QVariant
+
+from .constants import geometry_types
 
 
 class Layer:
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, id_: str, geometry_type: str) -> None:
         self.name = name
-        self._layer = QgsVectorLayer("Point", name, "memory")
+        self.source_id = id_
+        self.geometry_type = geometry_type
         self._added = []
         self._changed = []
         self._removed = []
-        self._layer.committedFeaturesAdded.connect(self.on_added)
-        self._layer.committedFeaturesRemoved.connect(self.on_removed)
-        self._layer.committedGeometriesChanges.connect(self.on_geometry_changed)
-        self._layer.committedAttributeValuesChanges.connect(
-            self.on_attribute_values_changed
-        )
-        self._layer.committedAttributesAdded.connect(self.on_attributes_added)
-        self._layer.committedAttributesDeleted.connect(self.on_attributes_deleted)
+        self._qgis_layer = None
 
-        self._layer.afterCommitChanges.connect(self.after_commit)
+    @property
+    def qgis_layer(self) -> QgsVectorLayer:
+        if self._qgis_layer is None:
+            self._qgis_layer = QgsVectorLayer(
+                f"{geometry_types[self.geometry_type]}?crs=EPSG:4326",
+                self.name,
+                "memory",
+            )
 
-        self.id = self._layer.id()
+            self._qgis_layer.committedFeaturesAdded.connect(self.on_added)
+            self._qgis_layer.committedFeaturesRemoved.connect(self.on_removed)
+            self._qgis_layer.committedGeometriesChanges.connect(
+                self.on_geometry_changed
+            )
+            self._qgis_layer.committedAttributeValuesChanges.connect(
+                self.on_attribute_values_changed
+            )
+            self._qgis_layer.committedAttributesAdded.connect(self.on_attributes_added)
+            self._qgis_layer.committedAttributesDeleted.connect(
+                self.on_attributes_deleted
+            )
+
+            self._qgis_layer.afterCommitChanges.connect(self.after_commit)
+
+        return self._qgis_layer
+
+    def reset(self) -> None:
+        self._added = []
+        self._changed = []
+        self._removed = []
+        self._qgis_layer = None
+
+    @property
+    def qgis_id(self) -> str | None:
+        if self._qgis_layer is None:
+            return None
+        return self._qgis_layer.id()
+
+    def add_features(self, features: Iterable[dict[str, Any]]) -> None:
+        provider = self.qgis_layer.dataProvider()
+        for feature in features:
+            geom = feature["geom"]
+            x, y = geom["coordinates"]
+            f = QgsFeature()
+            f.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(x, y)))
+            provider.addFeature(f)
+        self.qgis_layer.updateExtents()
 
     def dirty(self) -> bool:
         return bool(self._added or self._changed or self._removed)
@@ -33,10 +73,6 @@ class Layer:
         self._added = []
         self._changed = []
         self._removed = []
-
-    @property
-    def layer(self) -> QgsVectorLayer:
-        return self._layer
 
     def on_added(self, layer_id: str, features: Iterable[QgsFeature]) -> None:
         fids = [feature.id() for feature in features]
