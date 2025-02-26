@@ -1,15 +1,24 @@
+from __future__ import annotations
+
 import contextlib
+import json
 import time
-from typing import Any
+import uuid
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 
 import requests
+from qgis.core import QgsFeature, QgsGeometry, QgsPointXY
 
-from .constants import geometry_types
+from .constants import geometry_postgis_to_alias, geometry_types
+
+if TYPE_CHECKING:
+    from .layer import Layer
 
 
 class Postgrest:
     auth_url = "http://localhost:8000/auth/v1/token"
-    postgrest_url = "http://localhost:3000"
+    postgrest_url = "http://localhost:8000/rest/v1"
     anon_key = (
         "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
         "eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgI"
@@ -19,7 +28,8 @@ class Postgrest:
         "iyj_I_OZ2T9FtRU2BBNWN8Bu4GE"
     )
 
-    _session_max_age = 5 * 60  # seconds
+    # seconds, should be less than 1 hour (default token expiration time)
+    _session_max_age = 5 * 60
 
     def __init__(self) -> None:
         self._access_token = None
@@ -29,13 +39,14 @@ class Postgrest:
         self._session_time = time.time()
 
     def get_layers(self) -> list[tuple]:
-        response = self._get("layers")
+        response = self._request("GET", table_name="layers")
+        response.raise_for_status()
         layers = [
             (
                 layer["name"],
                 layer["id"],
                 layer["geometry_type"],
-                layer["attributes"],
+                layer["attributes"] or {},
             )
             for layer in response.json()
         ]
@@ -43,7 +54,7 @@ class Postgrest:
 
     def get_features(
         self, geometry_type: str, layer_id: str, params: dict[str, Any] | None = None
-    ) -> list[dict[str, Any]]:
+    ) -> list[PostgrestFeature]:
         if geometry_type not in geometry_types:
             raise ValueError(f"Invalid geometry type: {geometry_type}")
 
@@ -51,18 +62,75 @@ class Postgrest:
             params = {}
 
         params["layer"] = f"eq.{layer_id}"
-        table_name = f"{geometry_type}s"
-        response = self._get(table_name, params=params)
+        response = self._request(
+            "GET",
+            geometry_type=geometry_type,
+            params=params,
+        )
         response.raise_for_status()
-        return response.json()
+        return [PostgrestFeature.from_json(feature) for feature in response.json()]
 
-    def _get(
-        self, table_name: str, params: dict[str, Any] | None = None
+    def add_feature(self, feature: PostgrestFeature) -> None:
+        response = self._request(
+            "POST",
+            geometry_type=feature.geometry_type,
+            json=feature.to_json(),
+        )
+        response.raise_for_status()
+
+    def remove_feature(self, feature: PostgrestFeature) -> None:
+        if not feature.source_id:
+            raise ValueError("Feature has no source ID")
+
+        response = self._request(
+            "DELETE",
+            geometry_type=feature.geometry_type,
+            params={"id": f"eq.{feature.source_id}"},
+        )
+        response.raise_for_status()
+
+    def update_feature(self, feature: PostgrestFeature) -> None:
+        if not feature.source_id:
+            raise ValueError("Feature has no source ID")
+        response = self._request(
+            "PATCH",
+            geometry_type=feature.geometry_type,
+            json=feature.to_json(),
+            params={"id": f"eq.{feature.source_id}"},
+        )
+        response.raise_for_status()
+
+    def update_attributes(self, layer_id: str, attributes: list[dict]) -> None:
+        response = self._request(
+            "PATCH",
+            table_name="layers",
+            params={"id": f"eq.{layer_id}"},
+            json={"attributes": attributes},
+        )
+        response.raise_for_status()
+
+    def _request(
+        self,
+        method: str,
+        *,
+        table_name: str | None = None,
+        geometry_type: str | None = None,
+        json: dict | None = None,
+        params: dict[str, Any] | None = None,
     ) -> requests.Response:
-        response = self.session.get(
+        if table_name is None and geometry_type is None:
+            raise ValueError("Either table_name or geometry_type must be provided")
+        if table_name is None:
+            table_name = f"{geometry_type}s"
+        response = self.session.request(
+            method,
             f"{self.postgrest_url}/{table_name}",
             params=params,
-            headers={"Authorization": f"Bearer {self._access_token}"},
+            json=json,
+            headers={
+                "Authorization": f"Bearer {self._access_token}",
+                "apiKey": self.anon_key,
+            },
         )
         return response
 
@@ -107,3 +175,61 @@ class Postgrest:
         if self._session:
             self._session.close()
             self._session = None
+
+
+@dataclass
+class PostgrestFeature:
+    source_id: str
+    qgis_id: int | None
+    layer: str
+    attributes: dict[str, Any]
+    geom: dict[str, Any]
+
+    @classmethod
+    def from_json(cls, json_data: dict[str, Any]) -> PostgrestFeature:
+        return cls(
+            source_id=json_data["id"],
+            qgis_id=None,
+            layer=json_data["layer"],
+            attributes=json_data["attributes"] or {},
+            geom=json_data["geom"],
+        )
+
+    def to_json(self) -> dict[str, Any]:
+        data = {
+            "id": self.source_id,
+            "layer": self.layer,
+            "attributes": self.attributes,
+            "geom": self.geom,
+        }
+        return data
+
+    @classmethod
+    def from_qgis_feature(
+        cls, feature: QgsFeature, layer_source_id: str
+    ) -> PostgrestFeature:
+        return cls(
+            source_id=str(uuid.uuid4()),
+            qgis_id=feature.id(),
+            layer=layer_source_id,
+            attributes=dict(feature.attributeMap()),
+            geom=json.loads(feature.geometry().asJson()),
+        )
+
+    def add_to_qgis_layer(self, layer: Layer) -> None:
+        attrs_names = [a.name for a in layer.attributes]
+        if self.geometry_type == "point":
+            x, y = self.geom["coordinates"]
+            feature = QgsFeature()
+            feature.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(x, y)))
+            feature.setAttributes([self.attributes.get(name) for name in attrs_names])
+            layer.qgis_layer.dataProvider().addFeature(feature)
+        else:
+            raise NotImplementedError(
+                f"Geometry type {self.geometry_type} not implemented"
+            )
+        self.qgis_id = feature.id()
+
+    @property
+    def geometry_type(self) -> str:
+        return geometry_postgis_to_alias[self.geom["type"]]

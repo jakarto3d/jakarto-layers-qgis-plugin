@@ -2,8 +2,8 @@ from qgis.core import QgsProject
 from qgis.gui import QgisInterface
 from qgis.utils import iface
 
-from .layer import Layer
-from .postgrest import Postgrest
+from .layer import Layer, LayerAttribute
+from .postgrest import Postgrest, PostgrestFeature
 
 iface: QgisInterface
 
@@ -18,12 +18,47 @@ class LayerContainer:
 
     def fetch_layers(self) -> None:
         self._all_layers = {
-            id_: Layer(name, id_, geometry_type, attributes)
+            id_: Layer(
+                name,
+                id_,
+                geometry_type,
+                attributes=[LayerAttribute.from_json(a) for a in attributes],
+                commit_callback=self._commit_callback,
+            )
             for name, id_, geometry_type, attributes in self._postgrest_client.get_layers()
         }
         self._layer_name_to_source_id = {
             layer.name: layer.source_id for layer in self._all_layers.values()
         }
+
+    def _commit_callback(
+        self,
+        layer: Layer,
+        added: list[PostgrestFeature],
+        removed: list[PostgrestFeature],
+        attributes_changed: list[PostgrestFeature],
+        geometry_changed: list[PostgrestFeature],
+        layer_attributes_modified: bool,
+    ) -> None:
+        """Update the database tables after a qgis manual edit.
+
+        We should batch these for performance (not possible with Postgrest),
+        but for this prototype we'll just do one request per modification.
+        """
+        for feature in added:
+            self._postgrest_client.add_feature(feature)
+        for feature in removed:
+            self._postgrest_client.remove_feature(feature)
+        for feature in attributes_changed + geometry_changed:
+            self._postgrest_client.update_feature(feature)
+        if layer_attributes_modified:
+            # We should also remove any unused attributes
+            # in the features, but this would make one request for every feature.
+            # We'll do it when we have a better backend than Postgrest.
+            self._postgrest_client.update_attributes(
+                layer.source_id,
+                [{"name": a.name, "type": a.type} for a in layer.attributes],
+            )
 
     def is_loaded(self, id_or_name: str) -> bool:
         layer = self.get_layer(id_or_name)
