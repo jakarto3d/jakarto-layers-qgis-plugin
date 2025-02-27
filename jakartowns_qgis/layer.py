@@ -7,7 +7,7 @@ from typing import Any, Callable, Iterable
 from qgis.core import QgsFeature, QgsField, QgsGeometry, QgsVectorLayer
 from qgis.PyQt.QtCore import QVariant
 
-from .constants import geometry_types, python_to_qvariant, qmetatype_to_python
+from .constants import geometry_types, python_to_qmetatype, qmetatype_to_python
 from .postgrest import PostgrestFeature
 
 
@@ -47,7 +47,7 @@ class Layer:
 
             provider = self._qgis_layer.dataProvider()
             attrs = [
-                QgsField(attr.name, python_to_qvariant[attr.type])
+                QgsField(attr.name, python_to_qmetatype[attr.type])
                 for attr in self.attributes
             ]
             provider.addAttributes(attrs)

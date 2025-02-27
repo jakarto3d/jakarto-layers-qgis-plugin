@@ -1,4 +1,16 @@
-from qgis.PyQt.QtCore import QMetaType, QVariant
+from qgis.PyQt.QtCore import QMetaType
+
+auth_url = "http://localhost:8000/auth/v1/token"
+postgrest_url = "http://localhost:8000/rest/v1"
+realtime_url = "ws://localhost:8000/realtime/v1"
+anon_key = (
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
+    "eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgI"
+    "CJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgIC"
+    "AiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHA"
+    "iOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zs"
+    "iyj_I_OZ2T9FtRU2BBNWN8Bu4GE"
+)
 
 geometry_types = {
     "point": "Point",
@@ -25,12 +37,12 @@ qmetatype_to_python: dict[QMetaType, str] = {
     QMetaType.QTime: "time",
     QMetaType.QDateTime: "datetime",
 }
-python_to_qvariant: dict[str, QVariant.Type] = {
-    "bool": QVariant.Bool,
-    "int": QVariant.Int,
-    "float": QVariant.Double,
-    "str": QVariant.String,
-    "date": QVariant.Date,
-    "time": QVariant.Time,
-    "datetime": QVariant.DateTime,
+python_to_qmetatype: dict[str, QMetaType] = {
+    "bool": QMetaType.Bool,
+    "int": QMetaType.Int,
+    "float": QMetaType.Double,
+    "str": QMetaType.QString,
+    "date": QMetaType.QDate,
+    "time": QMetaType.QTime,
+    "datetime": QMetaType.QDateTime,
 }
