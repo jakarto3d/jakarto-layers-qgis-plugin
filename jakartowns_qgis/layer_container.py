@@ -11,7 +11,12 @@ from qgis.utils import iface
 from .constants import anon_key, realtime_url
 from .layer import Layer, LayerAttribute
 from .postgrest import Postgrest, PostgrestFeature
-from .realtime_websockets import UpdateMessage, parse_message
+from .realtime_websockets import (
+    InsertMessage,
+    UpdateMessage,
+    DeleteMessage,
+    parse_message,
+)
 from .vendor.realtime import AsyncRealtimeClient
 
 iface: QgisInterface
@@ -166,15 +171,26 @@ class LayerContainer:
 
     def on_postgres_changes(self, data: dict) -> None:
         try:
-            message: UpdateMessage | None = parse_message(data)
+            message: InsertMessage | UpdateMessage | DeleteMessage | None = (
+                parse_message(data)
+            )
             if message is None:
                 return
-            if isinstance(message, UpdateMessage):
+            if isinstance(message, InsertMessage):
                 layer_id = message.record.layer
                 if layer_id not in self._loaded_layers:
                     return
-                layer = self._loaded_layers[layer_id]
-                layer.update_feature(message.record)
+                self._loaded_layers[layer_id].add_feature(message.record)
+            elif isinstance(message, UpdateMessage):
+                layer_id = message.record.layer
+                if layer_id not in self._loaded_layers:
+                    return
+                self._loaded_layers[layer_id].update_feature(message.record)
+            elif isinstance(message, DeleteMessage):
+                for layer in self._loaded_layers.values():
+                    if feature := layer.pg_feature_by_source_id(message.old_record_id):
+                        layer.delete_feature(feature)
+                        break
         except Exception:
             traceback.print_exc()
 

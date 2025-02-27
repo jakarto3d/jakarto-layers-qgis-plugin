@@ -123,8 +123,13 @@ class Layer:
             or self._layer_attributes_modified
         )
 
-    def _pg_feature_by_qgis_id(self, qgis_id: int) -> PostgrestFeature | None:
+    def pg_feature_by_qgis_id(self, qgis_id: int) -> PostgrestFeature | None:
         return next((f for f in self._postgrest_features if f.qgis_id == qgis_id), None)
+
+    def pg_feature_by_source_id(self, source_id: str) -> PostgrestFeature | None:
+        return next(
+            (f for f in self._postgrest_features if f.source_id == source_id), None
+        )
 
     def after_commit(self) -> None:
         if not self.dirty():
@@ -154,7 +159,7 @@ class Layer:
         if self._ignore_signals:
             return
         for fid in fids:
-            if not (feature := self._pg_feature_by_qgis_id(fid)):
+            if not (feature := self.pg_feature_by_qgis_id(fid)):
                 continue
             self._removed.append(feature)
             self._postgrest_features.remove(feature)
@@ -177,7 +182,7 @@ class Layer:
                 else:
                     raise ValueError(f"Unknown value type: {type(value)}")
 
-                if not (feature := self._pg_feature_by_qgis_id(fid)):
+                if not (feature := self.pg_feature_by_qgis_id(fid)):
                     continue
 
                 feature.attributes[self.attributes[attr_idx].name] = value
@@ -209,7 +214,7 @@ class Layer:
         if self._ignore_signals:
             return
         for fid, geom in geometries.items():
-            if not (feature := self._pg_feature_by_qgis_id(fid)):
+            if not (feature := self.pg_feature_by_qgis_id(fid)):
                 continue
             feature.geom = json.loads(geom.asJson())
             self._geometry_changed.append(feature)
@@ -221,35 +226,70 @@ class Layer:
         Also, it avoids triggering a database update again in an infinite loop
         using the `ignore_signals` context manager.
         """
-        current_feature = next(
-            (p for p in self._postgrest_features if p.source_id == feature.source_id),
-            None,
-        )
+        current_feature = self.pg_feature_by_source_id(feature.source_id)
         if current_feature is None or current_feature.qgis_id is None:
             return
 
         self.qgis_layer.startEditing()
 
         try:
+            current_feature.attributes = feature.attributes
+            current_feature.geom = feature.geom
+
+            qgis_feature = self.qgis_layer.getFeature(current_feature.qgis_id)
+            # update the feature's attributes
+            for attr_name, value in feature.attributes.items():
+                field_idx = self.qgis_layer.fields().indexOf(attr_name)
+                if field_idx >= 0:
+                    qgis_feature.setAttribute(field_idx, value)
+            if feature.geom:
+                x, y = feature.geom["coordinates"]
+                qgis_feature.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(x, y)))
+
+            self.qgis_layer.updateFeature(qgis_feature)
             # avoid infinite loop
             # (realtime -> QGIS -> database -> realtime -> QGIS -> database -> ...)
             with self.ignore_signals():
-                current_feature.attributes = feature.attributes
-                current_feature.geom = feature.geom
-
-                qgis_feature = self.qgis_layer.getFeature(current_feature.qgis_id)
-                # update the feature's attributes
-                for attr_name, value in feature.attributes.items():
-                    field_idx = self.qgis_layer.fields().indexOf(attr_name)
-                    if field_idx >= 0:
-                        qgis_feature.setAttribute(field_idx, value)
-                if feature.geom:
-                    x, y = feature.geom["coordinates"]
-                    qgis_feature.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(x, y)))
-
-                self.qgis_layer.updateFeature(qgis_feature)
-                self.qgis_layer.updateExtents()
                 self.qgis_layer.commitChanges()
+        except:
+            self.qgis_layer.rollBack()
+            raise
+        finally:
+            iface.vectorLayerTools().stopEditing(self.qgis_layer)
+
+    def add_feature(self, feature: PostgrestFeature) -> None:
+        """Called when an insert message is received from the realtime server.
+
+        Similar as `.update_feature`.
+        """
+        self.qgis_layer.startEditing()
+        try:
+            feature.add_to_qgis_layer(self)
+            self._postgrest_features.append(feature)
+            self.qgis_layer.updateExtents()
+        except:
+            self.qgis_layer.rollBack()
+            raise
+        finally:
+            iface.vectorLayerTools().stopEditing(self.qgis_layer)
+
+    def delete_feature(self, feature: PostgrestFeature) -> None:
+        """Called when a delete message is received from the realtime server.
+
+        Similar as `.update_feature`.
+        """
+        current_feature = self.pg_feature_by_source_id(feature.source_id)
+        if current_feature is None or current_feature.qgis_id is None:
+            return
+
+        self.qgis_layer.startEditing()
+
+        try:
+            self.qgis_layer.deleteFeature(current_feature.qgis_id)
+            with self.ignore_signals():
+                self.qgis_layer.commitChanges()
+            self._postgrest_features.remove(current_feature)
+            self.qgis_layer.updateExtents()
         except:
             self.qgis_layer.rollBack()
             raise
