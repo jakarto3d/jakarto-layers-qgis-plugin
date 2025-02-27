@@ -19,12 +19,12 @@ venv:
 run-qgis:
     QGIS_PLUGINPATH=$(pwd) qgis &
 
-# Install dependencies in the `jakartowns_qgis_plugin/vendor` folder
+# Install dependencies in the `jakarto_layers_qgis_plugin/vendor` folder
 vendorize:
     . .venv/bin/activate \
-    && pip install --platform none --upgrade --no-deps --target jakartowns_qgis/vendor -r requirements-vendor.txt \
-    && rm -rf jakartowns_qgis/vendor/*.dist-info
+    && pip install --platform none --upgrade --no-deps --target jakarto_layers_qgis/vendor -r requirements-vendor.txt \
+    && rm -rf jakarto_layers_qgis/vendor/*.dist-info
 
 # Compile the resources.qrc file (only necessary when it changed)
 compile:
-    pyrcc5 jakartowns_qgis/ui/resources.qrc -o jakartowns_qgis/ui/resources_rc.py
+    pyrcc5 jakarto_layers_qgis/ui/resources.qrc -o jakarto_layers_qgis/ui/resources_rc.py

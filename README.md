@@ -1,3 +1,3 @@
-# Jakartowns QGIS Plugin
+# Jakarto layers QGIS Plugin
 
-Plugin to edit Jakarto layers with an embedded Jakartowns view.
+Plugin to view and edit Jakarto layers.

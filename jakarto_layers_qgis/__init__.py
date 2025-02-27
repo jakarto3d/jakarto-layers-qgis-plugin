@@ -10,6 +10,6 @@ sys.path.pop(0)
 
 
 def classFactory(_):
-    from jakartowns_qgis.plugin import Plugin
+    from jakarto_layers_qgis.plugin import Plugin
 
     return Plugin()

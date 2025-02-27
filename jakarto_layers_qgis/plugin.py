@@ -21,7 +21,7 @@ HERE = Path(__file__).parent
 class Plugin:
     """QGIS Plugin Implementation."""
 
-    name = "jakartowns_qgis"
+    name = "jakarto_layers_qgis"
 
     def __init__(self) -> None:
         self.actions: list[QAction] = []

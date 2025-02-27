@@ -1,0 +1,16 @@
+[general]
+name=Jakarto layers QGIS Plugin
+description=
+about=
+version=0.1.0
+qgisMinimumVersion=3.30
+author=David Caron
+email=david.caron@jakarto.com
+changelog=
+tags=
+repository=https://github.com/jakarto3d/jakarto-layers-qgis-plugin
+tracker=https://github.com/jakarto3d/jakarto-layers-qgis-plugin/issues
+homepage=https://github.com/jakarto3d/jakarto-layers-qgis-plugin
+category=Plugins
+experimental=True
+deprecated=False

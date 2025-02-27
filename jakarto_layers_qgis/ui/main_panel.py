@@ -8,7 +8,7 @@ FORM_CLASS, _ = uic.loadUiType(
     str(HERE / "main_panel.ui"),
     from_imports=True,
     resource_suffix="_rc",
-    import_from="jakartowns_qgis.ui",
+    import_from="jakarto_layers_qgis.ui",
 )
 
 
