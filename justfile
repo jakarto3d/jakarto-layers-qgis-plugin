@@ -13,5 +13,10 @@ venv:
     echo "Activate the venv with: "
     echo ". .venv/bin/activate"
 
+vendorize:
+    . .venv/bin/activate \
+    && pip install --platform none --upgrade --no-deps --target jakartowns_qgis/vendor -r requirements-vendor.txt \
+    && rm -rf jakartowns_qgis/vendor/*.dist-info
+
 compile:
     pyrcc5 jakartowns_qgis/ui/resources.qrc -o jakartowns_qgis/ui/resources_rc.py

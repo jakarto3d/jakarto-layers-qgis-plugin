@@ -1,0 +1,8 @@
+# It's a bad idea to include a package requiring a c extension here,
+# as the plugin will become much harder to distribute
+# For the final build, use the '--platform=none' flag (for websockets)
+# `just vendorize` will do this automatically
+websockets==14.2
+python-dateutil==2.8.1
+typing-extensions==4.12.2
+realtime==2.4.0
