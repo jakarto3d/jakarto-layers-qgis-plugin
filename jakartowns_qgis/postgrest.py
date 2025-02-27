@@ -10,24 +10,19 @@ from typing import TYPE_CHECKING, Any
 import requests
 from qgis.core import QgsFeature, QgsGeometry, QgsPointXY
 
-from .constants import geometry_postgis_to_alias, geometry_types
+from .constants import (
+    anon_key,
+    auth_url,
+    geometry_postgis_to_alias,
+    geometry_types,
+    postgrest_url,
+)
 
 if TYPE_CHECKING:
     from .layer import Layer
 
 
 class Postgrest:
-    auth_url = "http://localhost:8000/auth/v1/token"
-    postgrest_url = "http://localhost:8000/rest/v1"
-    anon_key = (
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
-        "eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgI"
-        "CJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgIC"
-        "AiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHA"
-        "iOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zs"
-        "iyj_I_OZ2T9FtRU2BBNWN8Bu4GE"
-    )
-
     # seconds, should be less than 1 hour (default token expiration time)
     _session_max_age = 5 * 60
 
@@ -124,12 +119,12 @@ class Postgrest:
             table_name = f"{geometry_type}s"
         response = self.session.request(
             method,
-            f"{self.postgrest_url}/{table_name}",
+            f"{postgrest_url}/{table_name}",
             params=params,
             json=json,
             headers={
                 "Authorization": f"Bearer {self._access_token}",
-                "apiKey": self.anon_key,
+                "apiKey": anon_key,
             },
         )
         return response
@@ -157,10 +152,10 @@ class Postgrest:
             params = {"grant_type": "refresh_token"}
 
         response = self.session.post(
-            self.auth_url,
+            auth_url,
             json=json_data,
             params=params,
-            headers={"apiKey": self.anon_key},
+            headers={"apiKey": anon_key},
         )
         response.raise_for_status()
         data = response.json()

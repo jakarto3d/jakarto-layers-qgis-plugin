@@ -133,6 +133,7 @@ class Plugin:
         """Removes the plugin menu item and icon from QGIS GUI."""
         if self._layer_container:
             self.layer_container.remove_all_layers()
+            self.layer_container.stop_realtime()
         if self._panel:
             self._panel.close()
             self._panel = None
@@ -148,6 +149,7 @@ class Plugin:
         iface.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.panel)
 
         self.layer_container.fetch_layers()
+        self.layer_container.start_realtime()
 
         self.panel.layerList.clear()
         self.panel.layerList.addItems(self.layer_container.all_layer_names())

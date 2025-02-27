@@ -1,9 +1,18 @@
+from __future__ import annotations
+
+import asyncio
+import threading
+import traceback
+
 from qgis.core import QgsProject
 from qgis.gui import QgisInterface
 from qgis.utils import iface
 
+from .constants import anon_key, realtime_url
 from .layer import Layer, LayerAttribute
 from .postgrest import Postgrest, PostgrestFeature
+from .realtime_websockets import UpdateMessage, parse_message
+from .vendor.realtime import AsyncRealtimeClient
 
 iface: QgisInterface
 
@@ -15,6 +24,8 @@ class LayerContainer:
         self._all_layers: dict[str, Layer] = {}
         self._layer_name_to_source_id: dict[str, str] = {}
         self._postgrest_client = Postgrest()
+        self._realtime: AsyncRealtimeClient | None = None
+        self._realtime_thread_event = threading.Event()
 
     def fetch_layers(self) -> None:
         self._all_layers = {
@@ -128,3 +139,44 @@ class LayerContainer:
             iface.mapCanvas().refresh()
             self._loaded_layers.clear()
             self._qgis_id_to_source_id.clear()
+
+    def start_realtime(self) -> None:
+        def _thread_func() -> None:
+            async def _run_realtime():
+                self._realtime = AsyncRealtimeClient(realtime_url, token=anon_key)
+                await self._realtime.connect()
+                await self._realtime.set_auth(self._postgrest_client._access_token)
+                await (
+                    self._realtime.channel("points")
+                    .on_postgres_changes("*", callback=self.on_postgres_changes)
+                    .subscribe()
+                )
+                while not self._realtime_thread_event.is_set():
+                    await asyncio.sleep(0.1)
+
+            try:
+                asyncio.run(_run_realtime())
+            except Exception:
+                if not self._realtime_thread_event.is_set():
+                    raise
+
+        self._realtime_thread_event = threading.Event()
+        thread = threading.Thread(target=_thread_func, daemon=True)
+        thread.start()
+
+    def on_postgres_changes(self, data: dict) -> None:
+        try:
+            message: UpdateMessage | None = parse_message(data)
+            if message is None:
+                return
+            if isinstance(message, UpdateMessage):
+                layer_id = message.record.layer
+                if layer_id not in self._loaded_layers:
+                    return
+                layer = self._loaded_layers[layer_id]
+                layer.update_feature(message.record)
+        except Exception:
+            traceback.print_exc()
+
+    def stop_realtime(self) -> None:
+        self._realtime_thread_event.set()
