@@ -6,7 +6,7 @@ Prototype to view and edit Jakarto layers in QGIS.
 
 Les "layers Jakarto" sont des couches de géométries vectorielles stockées sur le serveur de Jakarto.
 
-Le but est de Pouvoir les charger et les éditer dans QGIS, et qu'ils soient synchronisés avec les autres services de Jakarto (jakartowns, etc.). QGIS n'est pas requis, on peut s'en servir pour partages des données entre collègues sur Jakartowns seulement.
+Le but est de pouvoir les charger et les éditer dans QGIS, et qu'ils soient synchronisés avec les autres services de Jakarto (jakartowns, etc.). QGIS n'est pas requis, on peut s'en servir pour partager des données entre collègues sur Jakartowns seulement.
 
 ## Roadmap
 
