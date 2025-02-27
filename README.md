@@ -20,6 +20,17 @@ Le but est de pouvoir les charger et les éditer dans QGIS, et qu'ils soient syn
 - [ ] Implémenter la protection et les droits d'accès des couches
 - [ ] Pour aider à la localisation, afficher un point à l'endroit où l'utilisateur se trouve dans le navigateur Jakartowns (comme le curseur jaune sur la minimap de Jakartowns)
 
+## Installation
+
+Le projet est encore très prototype, il se peut qu'il manque des étapes dans cette liste (notamment, le développement sous Windows n'est pas encore considéré):
+
+- Suivre les instructions pour [installer supabase en self host](https://supabase.com/docs/guides/self-hosting/docker)
+- Ouvrir QGIS avec le repo comme dossier de plugin: `just run-qgis`
+- Installer "Jakarto layers qgis plugin" dans le menu des plugins QGIS.
+- Débugger parce que ça ne s'est probablement pas passé comme sur des roulettes.
+
+Voir `just` pour d'autres commandes de développement.
+
 ## Notes
 
 [1] Abandonné, QtWebKit n'est pas utilisable (un vieux safari de 2016), et l'installation de QtWebEngine n'est pas assez fluide pour le recommander aux utilisateurs. Une fois en place, on pourrait toujours supporter les 2, donc on pourrait afficher le panel avec Jakartowns quand QtWebEngine fonctionne, mais utiliser un navigateur web standard séparé quand il n'est pas disponible.
