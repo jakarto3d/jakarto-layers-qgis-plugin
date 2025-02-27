@@ -27,6 +27,7 @@ Le projet est encore très prototype, il se peut qu'il manque des étapes dans c
 - Suivre les instructions pour [installer supabase en self host](https://supabase.com/docs/guides/self-hosting/docker)
 - Ouvrir QGIS avec le repo comme dossier de plugin: `just run-qgis`
 - Installer "Jakarto layers qgis plugin" dans le menu des plugins QGIS.
+- Le plugin "Plugin Reloader" est recommandé pour le développement, il fonctionne bien avec ce projet.
 - Débugger parce que ça ne s'est probablement pas passé comme sur des roulettes.
 
 Voir `just` pour d'autres commandes de développement.
