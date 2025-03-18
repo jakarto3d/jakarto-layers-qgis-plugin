@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import requests
-from qgis.core import QgsFeature, QgsGeometry, QgsPointXY
+from qgis.core import QgsFeature, QgsGeometry, QgsPoint
 
 from .constants import (
     anon_key,
@@ -214,9 +214,9 @@ class PostgrestFeature:
     def add_to_qgis_layer(self, layer: Layer) -> None:
         attrs_names = [a.name for a in layer.attributes]
         if self.geometry_type == "point":
-            x, y = self.geom["coordinates"]
+            x, y, z = self.geom["coordinates"]
             feature = QgsFeature()
-            feature.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(x, y)))
+            feature.setGeometry(QgsGeometry.fromPoint(QgsPoint(x, y, z)))
             feature.setAttributes([self.attributes.get(name) for name in attrs_names])
             layer.qgis_layer.dataProvider().addFeature(feature)
         else:

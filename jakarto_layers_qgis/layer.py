@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Callable, Generator, Iterable
 
-from qgis.core import QgsFeature, QgsField, QgsGeometry, QgsPointXY, QgsVectorLayer
+from qgis.core import QgsFeature, QgsField, QgsGeometry, QgsPoint, QgsVectorLayer
 from qgis.gui import QgisInterface
 from qgis.PyQt.QtCore import QVariant
 from qgis.utils import iface
@@ -243,8 +243,8 @@ class Layer:
                 if field_idx >= 0:
                     qgis_feature.setAttribute(field_idx, value)
             if feature.geom:
-                x, y = feature.geom["coordinates"]
-                qgis_feature.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(x, y)))
+                x, y, z = feature.geom["coordinates"]
+                qgis_feature.setGeometry(QgsGeometry.fromPoint(QgsPoint(x, y, z)))
 
             self.qgis_layer.updateFeature(qgis_feature)
             # avoid infinite loop
