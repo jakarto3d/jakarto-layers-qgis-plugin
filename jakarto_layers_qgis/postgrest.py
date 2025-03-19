@@ -208,8 +208,24 @@ class PostgrestFeature:
             qgis_id=feature.id(),
             layer=layer_source_id,
             attributes=dict(feature.attributeMap()),
-            geom=json.loads(feature.geometry().asJson()),
+            geom=cls.force3d(json.loads(feature.geometry().asJson())),
         )
+
+    @staticmethod
+    def force3d(geom: dict[str, Any]) -> dict[str, Any]:
+        def _recurse(coords: list[Any]) -> None:
+            if not isinstance(coords, list) or not coords:
+                return
+            if isinstance(coords[0], list):
+                for coord in coords:
+                    _recurse(coord)
+            elif len(coords) == 2:
+                coords.append(0)
+            else:
+                raise ValueError(f"Invalid geometry type: {type(coords)}")
+
+        _recurse(geom["coordinates"])
+        return geom
 
     def add_to_qgis_layer(self, layer: Layer) -> None:
         attrs_names = [a.name for a in layer.attributes]
