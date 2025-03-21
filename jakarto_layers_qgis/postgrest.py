@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 import requests
 from qgis.core import QgsFeature, QgsGeometry, QgsPoint
+from qgis.PyQt.QtCore import QVariant
 
 from .constants import (
     anon_key,
@@ -203,11 +204,17 @@ class PostgrestFeature:
     def from_qgis_feature(
         cls, feature: QgsFeature, layer_source_id: str
     ) -> PostgrestFeature:
+        attributes = {}
+        for k, v in feature.attributeMap().items():
+            if isinstance(v, QVariant):
+                v = v.value() if not v.isNull() else None
+            attributes[k] = v
+
         return cls(
             source_id=str(uuid.uuid4()),
             qgis_id=feature.id(),
             layer=layer_source_id,
-            attributes=dict(feature.attributeMap()),
+            attributes=attributes,
             geom=cls.force3d(json.loads(feature.geometry().asJson())),
         )
 
