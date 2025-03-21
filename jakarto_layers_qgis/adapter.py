@@ -22,7 +22,7 @@ from .vendor.realtime import AsyncRealtimeClient
 iface: QgisInterface
 
 
-class LayerContainer:
+class Adapter:
     def __init__(self) -> None:
         self._loaded_layers: dict[str, Layer] = {}
         self._qgis_id_to_source_id: dict[str, str] = {}

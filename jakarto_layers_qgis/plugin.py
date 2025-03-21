@@ -10,7 +10,7 @@ from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QWidget
 from qgis.utils import iface
 
-from .layer_container import LayerContainer
+from .adapter import Adapter
 from .ui.main_panel import MainPanel
 
 iface: QgisInterface
@@ -29,7 +29,7 @@ class Plugin:
         self.toolbar = None
         self._panel = None
 
-        self._layer_container = None
+        self._adapter = None
 
     @property
     def panel(self) -> MainPanel:
@@ -38,10 +38,10 @@ class Plugin:
         return self._panel
 
     @property
-    def layer_container(self) -> LayerContainer:
-        if self._layer_container is None:
-            self._layer_container = LayerContainer()
-        return self._layer_container
+    def adapter(self) -> Adapter:
+        if self._adapter is None:
+            self._adapter = Adapter()
+        return self._adapter
 
     def add_action(
         self,
@@ -131,9 +131,9 @@ class Plugin:
 
     def unload(self) -> None:
         """Removes the plugin menu item and icon from QGIS GUI."""
-        if self._layer_container:
-            self.layer_container.remove_all_layers()
-            self.layer_container.stop_realtime()
+        if self._adapter:
+            self.adapter.remove_all_layers()
+            self.adapter.stop_realtime()
         if self._panel:
             self._panel.close()
             self._panel = None
@@ -148,11 +148,11 @@ class Plugin:
     def run(self) -> None:
         iface.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.panel)
 
-        self.layer_container.fetch_layers()
-        self.layer_container.start_realtime()
+        self.adapter.fetch_layers()
+        self.adapter.start_realtime()
 
         self.panel.layerList.clear()
-        self.panel.layerList.addItems(self.layer_container.all_layer_names())
+        self.panel.layerList.addItems(self.adapter.all_layer_names())
 
     def get_selected_layer(self, value=None) -> str | None:
         if value is not None and hasattr(value, "text"):
@@ -163,7 +163,7 @@ class Plugin:
     def on_item_selection_changed(self) -> None:
         add_enabled, remove_enabled = True, True
         if layer_name := self.get_selected_layer():
-            loaded = self.layer_container.is_loaded(layer_name)
+            loaded = self.adapter.is_loaded(layer_name)
             add_enabled = not loaded
             remove_enabled = loaded
 
@@ -171,21 +171,21 @@ class Plugin:
         self.panel.layerRemove.setEnabled(remove_enabled)
 
     def on_layers_removed(self, removed_ids: list[str]) -> None:
-        if self.layer_container.on_layers_removed(removed_ids):
+        if self.adapter.on_layers_removed(removed_ids):
             self.on_item_selection_changed()
             iface.mapCanvas().refresh()
 
     def add_layer(self, value) -> None:
         layer_name = self.get_selected_layer(value)
-        if self.layer_container.add_layer(layer_name):
+        if self.adapter.add_layer(layer_name):
             self.on_item_selection_changed()
             iface.mapCanvas().refresh()
 
-        layer = self.layer_container.get_layer(layer_name)
+        layer = self.adapter.get_layer(layer_name)
         if layer is not None:
             iface.setActiveLayer(layer.qgis_layer)
 
     def remove_layer(self) -> None:
-        if self.layer_container.remove_layer(self.get_selected_layer()):
+        if self.adapter.remove_layer(self.get_selected_layer()):
             self.on_item_selection_changed()
             iface.mapCanvas().refresh()
