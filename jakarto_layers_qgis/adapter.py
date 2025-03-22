@@ -9,12 +9,14 @@ from qgis.gui import QgisInterface
 from qgis.utils import iface
 
 from .constants import anon_key, realtime_url
+from .converters import qgis_to_supabase_feature
+from .events_qgis import QGISDeleteEvent, QGISInsertEvent, QGISUpdateEvent
 from .layer import Layer, LayerAttribute
-from .postgrest import Postgrest, PostgrestFeature
-from .realtime_websockets import (
+from .postgrest import Postgrest
+from .events_realtime import (
+    DeleteMessage,
     InsertMessage,
     UpdateMessage,
-    DeleteMessage,
     parse_message,
 )
 from .vendor.realtime import AsyncRealtimeClient
@@ -25,9 +27,8 @@ iface: QgisInterface
 class Adapter:
     def __init__(self) -> None:
         self._loaded_layers: dict[str, Layer] = {}
-        self._qgis_id_to_source_id: dict[str, str] = {}
+        self._qgis_id_to_supabase_id: dict[str, str] = {}
         self._all_layers: dict[str, Layer] = {}
-        self._layer_name_to_source_id: dict[str, str] = {}
         self._postgrest_client = Postgrest()
         self._realtime: AsyncRealtimeClient | None = None
         self._realtime_thread_event = threading.Event()
@@ -43,36 +44,46 @@ class Adapter:
             )
             for name, id_, geometry_type, attributes in self._postgrest_client.get_layers()
         }
-        self._layer_name_to_source_id = {
-            layer.name: layer.source_id for layer in self._all_layers.values()
-        }
 
     def _commit_callback(
         self,
         layer: Layer,
-        added: list[PostgrestFeature],
-        removed: list[PostgrestFeature],
-        attributes_changed: list[PostgrestFeature],
-        geometry_changed: list[PostgrestFeature],
+        events: list[QGISInsertEvent | QGISUpdateEvent | QGISDeleteEvent],
         layer_attributes_modified: bool,
     ) -> None:
         """Update the database tables after a qgis manual edit.
 
-        We should batch these for performance (not possible with Postgrest),
+        We should batch these for performance (maybe upserts with Postgrest),
         but for this prototype we'll just do one request per modification.
         """
-        for feature in added:
-            self._postgrest_client.add_feature(feature)
-        for feature in removed:
-            self._postgrest_client.remove_feature(feature)
-        for feature in attributes_changed + geometry_changed:
-            self._postgrest_client.update_feature(feature)
+        layer_id = layer.supabase_layer_id
+
+        for event in events:
+            if isinstance(event, QGISInsertEvent):
+                for feature in event.features:
+                    supabase_feature = qgis_to_supabase_feature(feature, layer_id)
+                    self._postgrest_client.add_feature(supabase_feature)
+                    layer.add_feature_id(feature.id(), supabase_feature.id)
+            elif isinstance(event, QGISUpdateEvent):
+                for id_ in event.ids:
+                    if not (feature := layer.get_qgis_feature(id_)):
+                        continue
+                    supabase_id = layer.get_supabase_feature_id(feature.id())
+                    supabase_feature = qgis_to_supabase_feature(
+                        feature, layer_id, supabase_id
+                    )
+                    self._postgrest_client.update_feature(supabase_feature)
+            elif isinstance(event, QGISDeleteEvent):
+                for id_ in event.ids:
+                    supabase_id = layer.get_supabase_feature_id(id_)
+                    if supabase_id is None:
+                        continue
+                    self._postgrest_client.remove_feature(supabase_id)
+                    layer.remove_supabase_feature_id(supabase_id)
+
         if layer_attributes_modified:
-            # We should also remove any unused attributes
-            # in the features, but this would make one request for every feature.
-            # We'll do it when we have a better backend than Postgrest.
             self._postgrest_client.update_attributes(
-                layer.source_id,
+                layer.supabase_layer_id,
                 [{"name": a.name, "type": a.type} for a in layer.attributes],
             )
 
@@ -80,43 +91,45 @@ class Adapter:
         layer = self.get_layer(id_or_name)
         if layer is None:
             return False
-        return layer.source_id in self._loaded_layers
+        return layer.supabase_layer_id in self._loaded_layers
 
     def all_layer_names(self) -> list[str]:
-        return list(self._layer_name_to_source_id.keys())
+        return [layer.name for layer in self._all_layers.values()]
 
     def get_layer(self, id_or_name_or_qgis_id: str | None) -> Layer | None:
         if id_or_name_or_qgis_id is None:
             return None
         if id_or_name_or_qgis_id in self._all_layers:
             return self._all_layers[id_or_name_or_qgis_id]
-        if id_or_name_or_qgis_id in self._layer_name_to_source_id:
-            return self._all_layers[
-                self._layer_name_to_source_id[id_or_name_or_qgis_id]
-            ]
-        if id_or_name_or_qgis_id in self._qgis_id_to_source_id:
-            return self._all_layers[self._qgis_id_to_source_id[id_or_name_or_qgis_id]]
+        if id_or_name_or_qgis_id in self.all_layer_names():
+            return [
+                layer
+                for layer in self._all_layers.values()
+                if layer.name == id_or_name_or_qgis_id
+            ][0]
+        if id_or_name_or_qgis_id in self._qgis_id_to_supabase_id:
+            return self._all_layers[self._qgis_id_to_supabase_id[id_or_name_or_qgis_id]]
         return None
 
     def add_layer(self, id_or_name: str | None) -> bool:
         if not (layer := self.get_layer(id_or_name)):
             return False
-        if layer.source_id in self._loaded_layers:
+        if layer.supabase_layer_id in self._loaded_layers:
             return False
 
         features = self._postgrest_client.get_features(
-            layer.geometry_type, layer.source_id
+            layer.geometry_type, layer.supabase_layer_id
         )
         layer.add_features(features)
         QgsProject.instance().addMapLayer(layer.qgis_layer, addToLegend=True)
-        self._loaded_layers[layer.source_id] = layer
-        self._qgis_id_to_source_id[layer.qgis_layer.id()] = layer.source_id
+        self._loaded_layers[layer.supabase_layer_id] = layer
+        self._qgis_id_to_supabase_id[layer.qgis_layer.id()] = layer.supabase_layer_id
         return True
 
     def remove_layer(self, id_or_name: str | None) -> bool:
         if not (layer := self.get_layer(id_or_name)):
             return False
-        if layer.source_id not in self._loaded_layers:
+        if layer.supabase_layer_id not in self._loaded_layers:
             return False
         # this will trigger the on_layers_removed signal
         QgsProject.instance().removeMapLayer(layer.qgis_layer)
@@ -126,24 +139,24 @@ class Adapter:
         """Called when layers are removed from the map (not by the plugin)."""
         removed = False
         for qgis_id in qgis_ids:
-            if qgis_id not in self._qgis_id_to_source_id:
+            if qgis_id not in self._qgis_id_to_supabase_id:
                 continue
-            source_id = self._qgis_id_to_source_id[qgis_id]
-            layer = self._loaded_layers[source_id]
+            supabase_id = self._qgis_id_to_supabase_id[qgis_id]
+            layer = self._loaded_layers[supabase_id]
             layer.reset()
-            self._loaded_layers.pop(source_id, None)
-            self._qgis_id_to_source_id.pop(qgis_id, None)
+            self._loaded_layers.pop(supabase_id, None)
+            self._qgis_id_to_supabase_id.pop(qgis_id, None)
             removed = True
 
         return removed
 
     def remove_all_layers(self) -> None:
         if self._loaded_layers:
-            for source_id in list(self._loaded_layers.keys()):
-                self.remove_layer(source_id)
+            for supabase_id in list(self._loaded_layers.keys()):
+                self.remove_layer(supabase_id)
             iface.mapCanvas().refresh()
             self._loaded_layers.clear()
-            self._qgis_id_to_source_id.clear()
+            self._qgis_id_to_supabase_id.clear()
 
     def start_realtime(self) -> None:
         def _thread_func() -> None:
@@ -153,7 +166,7 @@ class Adapter:
                 await self._realtime.set_auth(self._postgrest_client._access_token)
                 await (
                     self._realtime.channel("points")
-                    .on_postgres_changes("*", callback=self.on_postgres_changes)
+                    .on_postgres_changes("*", callback=self.on_supabase_realtime_event)
                     .subscribe()
                 )
                 while not self._realtime_thread_event.is_set():
@@ -169,10 +182,10 @@ class Adapter:
         thread = threading.Thread(target=_thread_func, daemon=True)
         thread.start()
 
-    def on_postgres_changes(self, data: dict) -> None:
+    def on_supabase_realtime_event(self, event_data: dict) -> None:
         try:
             message: InsertMessage | UpdateMessage | DeleteMessage | None = (
-                parse_message(data)
+                parse_message(event_data)
             )
             if message is None:
                 return
@@ -188,8 +201,7 @@ class Adapter:
                 self._loaded_layers[layer_id].update_feature(message.record)
             elif isinstance(message, DeleteMessage):
                 for layer in self._loaded_layers.values():
-                    if feature := layer.pg_feature_by_source_id(message.old_record_id):
-                        layer.delete_feature(feature)
+                    if layer.delete_feature(message.old_record_id):
                         break
         except Exception:
             traceback.print_exc()

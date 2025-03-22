@@ -37,25 +37,16 @@ Les features sont stockées en mémoire dans l'adapter dans un objet qui contien
 
 Il y a 6 types d'évènements:
 
-- `qgis_insert_event`: une feature est créée dans QGIS
-- `qgis_update_event`: une feature est mise à jour dans QGIS
-- `qgis_delete_event`: une feature est supprimée dans QGIS
-- `supabase_insert_event`: une feature est créée dans Supabase
-- `supabase_update_event`: une feature est mise à jour dans Supabase
-- `supabase_delete_event`: une feature est supprimée dans Supabase
+- `qgis_insert`: une feature est créée dans QGIS
+- `qgis_update`: une feature est mise à jour dans QGIS
+- `qgis_delete`: une feature est supprimée dans QGIS
+- `supabase_insert`: une feature est créée dans Supabase
+- `supabase_update`: une feature est mise à jour dans Supabase
+- `supabase_delete`: une feature est supprimée dans Supabase
 
-Chaque évènement est traduit en une requête:
+Pour chaque évènement, l'adapter va transformer les features et les passer à l'autre service (soit QGIS, soit Supabase). Il doit aussi ignorer le prochain message, par exemple:
 
-- `qgis_insert_event` -> `supabase_insert_request`
-- `qgis_update_event` -> `supabase_update_request`
-- `qgis_delete_event` -> `supabase_delete_request`
-- `supabase_insert_event` -> `qgis_insert_request`
-- `supabase_update_event` -> `qgis_update_request`
-- `supabase_delete_event` -> `qgis_delete_request`
-
-Pour chaque évènement, l'adapter va le transformer et le passer à l'autre service (soit QGIS, soit Supabase). Il doit aussi ignorer le prochain message, par exemple:
-
-- `qgis_insert_event` -> `supabase_insert_request` -> La feature est envoyée à Supabase
+- `qgis_insert_event` -> La feature est envoyée à Supabase
 - `supabase_insert_event` -> On reçoit un message, mais pour la même feature qui vient d'être créée, on ignore le message
 
 ## Roadmap

@@ -1,26 +1,18 @@
 from __future__ import annotations
 
 import contextlib
-import json
 import time
-import uuid
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import requests
-from qgis.core import QgsFeature, QgsGeometry, QgsPoint
-from qgis.PyQt.QtCore import QVariant
 
 from .constants import (
     anon_key,
     auth_url,
-    geometry_postgis_to_alias,
     geometry_types,
     postgrest_url,
 )
-
-if TYPE_CHECKING:
-    from .layer import Layer
+from .supabase_feature import SupabaseFeature
 
 
 class Postgrest:
@@ -42,7 +34,7 @@ class Postgrest:
                 layer["name"],
                 layer["id"],
                 layer["geometry_type"],
-                layer["attributes"] or {},
+                layer["attributes"] or [],
             )
             for layer in response.json()
         ]
@@ -50,7 +42,7 @@ class Postgrest:
 
     def get_features(
         self, geometry_type: str, layer_id: str, params: dict[str, Any] | None = None
-    ) -> list[PostgrestFeature]:
+    ) -> list[SupabaseFeature]:
         if geometry_type not in geometry_types:
             raise ValueError(f"Invalid geometry type: {geometry_type}")
 
@@ -64,9 +56,9 @@ class Postgrest:
             params=params,
         )
         response.raise_for_status()
-        return [PostgrestFeature.from_json(feature) for feature in response.json()]
+        return [SupabaseFeature.from_json(feature) for feature in response.json()]
 
-    def add_feature(self, feature: PostgrestFeature) -> None:
+    def add_feature(self, feature: SupabaseFeature) -> None:
         response = self._request(
             "POST",
             geometry_type=feature.geometry_type,
@@ -74,25 +66,22 @@ class Postgrest:
         )
         response.raise_for_status()
 
-    def remove_feature(self, feature: PostgrestFeature) -> None:
-        if not feature.source_id:
-            raise ValueError("Feature has no source ID")
-
+    def remove_feature(self, supabase_feature_id: str) -> None:
         response = self._request(
             "DELETE",
-            geometry_type=feature.geometry_type,
-            params={"id": f"eq.{feature.source_id}"},
+            geometry_type="point",  # to select the table
+            params={"id": f"eq.{supabase_feature_id}"},
         )
         response.raise_for_status()
 
-    def update_feature(self, feature: PostgrestFeature) -> None:
-        if not feature.source_id:
+    def update_feature(self, feature: SupabaseFeature) -> None:
+        if not feature.id:
             raise ValueError("Feature has no source ID")
         response = self._request(
             "PATCH",
             geometry_type=feature.geometry_type,
             json=feature.to_json(),
-            params={"id": f"eq.{feature.source_id}"},
+            params={"id": f"eq.{feature.id}"},
         )
         response.raise_for_status()
 
@@ -171,83 +160,3 @@ class Postgrest:
         if self._session:
             self._session.close()
             self._session = None
-
-
-@dataclass
-class PostgrestFeature:
-    source_id: str
-    qgis_id: int | None
-    layer: str
-    attributes: dict[str, Any]
-    geom: dict[str, Any]
-
-    @classmethod
-    def from_json(cls, json_data: dict[str, Any]) -> PostgrestFeature:
-        return cls(
-            source_id=json_data["id"],
-            qgis_id=None,
-            layer=json_data["layer"],
-            attributes=json_data["attributes"] or {},
-            geom=json_data["geom"],
-        )
-
-    def to_json(self) -> dict[str, Any]:
-        data = {
-            "id": self.source_id,
-            "layer": self.layer,
-            "attributes": self.attributes,
-            "geom": self.geom,
-        }
-        return data
-
-    @classmethod
-    def from_qgis_feature(
-        cls, feature: QgsFeature, layer_source_id: str
-    ) -> PostgrestFeature:
-        attributes = {}
-        for k, v in feature.attributeMap().items():
-            if isinstance(v, QVariant):
-                v = v.value() if not v.isNull() else None
-            attributes[k] = v
-
-        return cls(
-            source_id=str(uuid.uuid4()),
-            qgis_id=feature.id(),
-            layer=layer_source_id,
-            attributes=attributes,
-            geom=cls.force3d(json.loads(feature.geometry().asJson())),
-        )
-
-    @staticmethod
-    def force3d(geom: dict[str, Any]) -> dict[str, Any]:
-        def _recurse(coords: list[Any]) -> None:
-            if not isinstance(coords, list) or not coords:
-                return
-            if isinstance(coords[0], list):
-                for coord in coords:
-                    _recurse(coord)
-            elif len(coords) == 2:
-                coords.append(0)
-            else:
-                raise ValueError(f"Invalid geometry type: {type(coords)}")
-
-        _recurse(geom["coordinates"])
-        return geom
-
-    def add_to_qgis_layer(self, layer: Layer) -> None:
-        attrs_names = [a.name for a in layer.attributes]
-        if self.geometry_type == "point":
-            x, y, z = self.geom["coordinates"]
-            feature = QgsFeature()
-            feature.setGeometry(QgsGeometry.fromPoint(QgsPoint(x, y, z)))
-            feature.setAttributes([self.attributes.get(name) for name in attrs_names])
-            layer.qgis_layer.dataProvider().addFeature(feature)
-        else:
-            raise NotImplementedError(
-                f"Geometry type {self.geometry_type} not implemented"
-            )
-        self.qgis_id = feature.id()
-
-    @property
-    def geometry_type(self) -> str:
-        return geometry_postgis_to_alias[self.geom["type"]]

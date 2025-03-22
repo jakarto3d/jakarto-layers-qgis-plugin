@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from typing import Literal
 
-from .postgrest import PostgrestFeature
+from .supabase_feature import SupabaseFeature
 
 
 def parse_message(
@@ -24,7 +23,7 @@ def parse_message(
 class InsertMessage:
     table: str
     type: Literal["INSERT"]
-    record: PostgrestFeature
+    record: SupabaseFeature
     columns: list[dict[str, str]]
     errors: dict | None
     schema: str
@@ -38,7 +37,7 @@ class InsertMessage:
         return cls(
             table=json_data["table"],
             type=json_data["type"],
-            record=PostgrestFeature.from_json(json_data["record"]),
+            record=SupabaseFeature.from_json(json_data["record"]),
             columns=json_data["columns"],
             errors=json_data["errors"],
             schema=json_data["schema"],
@@ -50,7 +49,7 @@ class InsertMessage:
 class UpdateMessage:
     table: str
     type: Literal["UPDATE"]
-    record: PostgrestFeature
+    record: SupabaseFeature
     columns: list[dict[str, str]]
     errors: dict | None
     schema: str
@@ -65,7 +64,7 @@ class UpdateMessage:
         return cls(
             table=json_data["table"],
             type=json_data["type"],
-            record=PostgrestFeature.from_json(json_data["record"]),
+            record=SupabaseFeature.from_json(json_data["record"]),
             columns=json_data["columns"],
             errors=json_data["errors"],
             schema=json_data["schema"],
