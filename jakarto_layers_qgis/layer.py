@@ -33,6 +33,8 @@ class Layer:
         self._qgis_id_to_supabase_id: dict[int, str] = {}
         self._supabase_id_to_qgis_id: dict[str, int] = {}
 
+        self.manually_updated_supabase_ids: set[str] = set()
+
         self._qgis_events: list[
             QGISInsertEvent | QGISUpdateEvent | QGISDeleteEvent
         ] = []
@@ -102,7 +104,7 @@ class Layer:
         self._reset_edits()
         self._qgis_layer = None
 
-    def add_features(self, features: list[SupabaseFeature]) -> None:
+    def add_features_on_load(self, features: list[SupabaseFeature]) -> None:
         """Called on the first load of the layer."""
         geometry_types = set(feature.geometry_type for feature in features)
         if wrong := geometry_types - {self.geometry_type}:
@@ -132,19 +134,42 @@ class Layer:
         )
         self._reset_edits()
 
+    def get_qgis_feature(self, qgis_id: int) -> QgsFeature | None:
+        feature = self.qgis_layer.getFeature(qgis_id)
+        if not feature.isValid():
+            return None
+        return feature
+
     def on_event_added(self, layer_id: str, features: Iterable[QgsFeature]) -> None:
         """Called when features are added to the layer."""
+        # remove echo of supabase_insert event
+        features = [f for f in features if f.id() not in self._qgis_id_to_supabase_id]
+        if not features:
+            return
         self._qgis_events.append(QGISInsertEvent(list(features)))
 
     def on_event_removed(self, layer_id: str, fids: list[int]) -> None:
         """Called when features are removed from the layer."""
+        # remove echo of supabase_delete event
+        fids = [id_ for id_ in fids if id_ in self._qgis_id_to_supabase_id]
+        if not fids:
+            return
         self._qgis_events.append(QGISDeleteEvent(list(fids)))
 
     def on_event_attributes_changed(
         self, layer_id: str, values: dict[int, dict[int, Any]]
     ) -> None:
         """Called when the attributes of a feature are changed."""
-        self._qgis_events.append(QGISUpdateEvent(list(values.keys())))
+        fids = []
+        for id_ in values.keys():
+            supabase_id = self._qgis_id_to_supabase_id.get(id_)
+            if supabase_id is None:
+                continue
+            fids.append(id_)
+        if not fids:
+            return
+
+        self._qgis_events.append(QGISUpdateEvent(fids))
 
     def on_event_attributes_added(
         self, layer_id: str, attributes: list[QgsField]
@@ -168,8 +193,12 @@ class Layer:
         ]
         self._layer_attributes_modified = True
 
-    def add_feature(self, feature: SupabaseFeature) -> None:
+    def on_realtime_insert(self, feature: SupabaseFeature) -> None:
         """Called when an insert message is received from the realtime server."""
+
+        if feature.id in self._supabase_id_to_qgis_id:
+            return  # echo of a qgis_insert event
+
         self.qgis_layer.startEditing()
         try:
             qgis_feature = supabase_to_qgis_feature(feature, self)
@@ -182,14 +211,13 @@ class Layer:
         finally:
             iface.vectorLayerTools().stopEditing(self.qgis_layer)
 
-    def get_qgis_feature(self, qgis_id: int) -> QgsFeature | None:
-        feature = self.qgis_layer.getFeature(qgis_id)
-        if not feature.isValid():
-            return None
-        return feature
-
-    def update_feature(self, feature: SupabaseFeature) -> None:
+    def on_realtime_update(self, feature: SupabaseFeature) -> None:
         """Called when an update message is received from the realtime server."""
+
+        if feature.id in self.manually_updated_supabase_ids:
+            self.manually_updated_supabase_ids.remove(feature.id)
+            return  # echo of a qgis_update event
+
         qgis_id = self._supabase_id_to_qgis_id.get(feature.id)
         if qgis_id is None:
             return
@@ -220,11 +248,11 @@ class Layer:
         finally:
             iface.vectorLayerTools().stopEditing(self.qgis_layer)
 
-    def delete_feature(self, supabase_feature_id: str) -> bool:
+    def on_realtime_delete(self, supabase_feature_id: str) -> bool:
         """Called when a delete message is received from the realtime server."""
         qgis_id = self._supabase_id_to_qgis_id.get(supabase_feature_id)
         if qgis_id is None:
-            return False
+            return False  # echo of a qgis_delete event
 
         self.qgis_layer.startEditing()
 

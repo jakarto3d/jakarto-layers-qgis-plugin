@@ -73,6 +73,7 @@ class Adapter:
                         feature, layer_id, supabase_id
                     )
                     self._postgrest_client.update_feature(supabase_feature)
+                    layer.manually_updated_supabase_ids.add(supabase_feature.id)
             elif isinstance(event, QGISDeleteEvent):
                 for id_ in event.ids:
                     supabase_id = layer.get_supabase_feature_id(id_)
@@ -120,7 +121,7 @@ class Adapter:
         features = self._postgrest_client.get_features(
             layer.geometry_type, layer.supabase_layer_id
         )
-        layer.add_features(features)
+        layer.add_features_on_load(features)
         QgsProject.instance().addMapLayer(layer.qgis_layer, addToLegend=True)
         self._loaded_layers[layer.supabase_layer_id] = layer
         self._qgis_id_to_supabase_id[layer.qgis_layer.id()] = layer.supabase_layer_id
@@ -193,15 +194,15 @@ class Adapter:
                 layer_id = message.record.layer
                 if layer_id not in self._loaded_layers:
                     return
-                self._loaded_layers[layer_id].add_feature(message.record)
+                self._loaded_layers[layer_id].on_realtime_insert(message.record)
             elif isinstance(message, UpdateMessage):
                 layer_id = message.record.layer
                 if layer_id not in self._loaded_layers:
                     return
-                self._loaded_layers[layer_id].update_feature(message.record)
+                self._loaded_layers[layer_id].on_realtime_update(message.record)
             elif isinstance(message, DeleteMessage):
                 for layer in self._loaded_layers.values():
-                    if layer.delete_feature(message.old_record_id):
+                    if layer.on_realtime_delete(message.old_record_id):
                         break
         except Exception:
             traceback.print_exc()
