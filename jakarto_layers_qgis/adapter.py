@@ -11,14 +11,15 @@ from qgis.utils import iface
 from .constants import anon_key, realtime_url
 from .converters import qgis_to_supabase_feature
 from .events_qgis import QGISDeleteEvent, QGISInsertEvent, QGISUpdateEvent
-from .layer import Layer, LayerAttribute
-from .postgrest import Postgrest
 from .events_realtime import (
     DeleteMessage,
     InsertMessage,
     UpdateMessage,
     parse_message,
 )
+from .layer import Layer, LayerAttribute
+from .logs import log
+from .postgrest import Postgrest
 from .vendor.realtime import AsyncRealtimeClient
 
 iface: QgisInterface
@@ -60,11 +61,13 @@ class Adapter:
 
         for event in events:
             if isinstance(event, QGISInsertEvent):
+                log(f"QGISInsertEvent: {len(event.features)} features")
                 for feature in event.features:
                     supabase_feature = qgis_to_supabase_feature(feature, layer_id)
                     self._postgrest_client.add_feature(supabase_feature)
                     layer.add_feature_id(feature.id(), supabase_feature.id)
             elif isinstance(event, QGISUpdateEvent):
+                log(f"QGISUpdateEvent: {len(event.ids)} features")
                 for id_ in event.ids:
                     if not (feature := layer.get_qgis_feature(id_)):
                         continue
@@ -75,6 +78,7 @@ class Adapter:
                     self._postgrest_client.update_feature(supabase_feature)
                     layer.manually_updated_supabase_ids.add(supabase_feature.id)
             elif isinstance(event, QGISDeleteEvent):
+                log(f"QGISDeleteEvent: {len(event.ids)} features")
                 for id_ in event.ids:
                     supabase_id = layer.get_supabase_feature_id(id_)
                     if supabase_id is None:
@@ -191,16 +195,19 @@ class Adapter:
             if message is None:
                 return
             if isinstance(message, InsertMessage):
+                log(f"Supabase InsertMessage: {message.record.id}")
                 layer_id = message.record.layer
                 if layer_id not in self._loaded_layers:
                     return
                 self._loaded_layers[layer_id].on_realtime_insert(message.record)
             elif isinstance(message, UpdateMessage):
+                log(f"Supabase UpdateMessage: {message.record.id}")
                 layer_id = message.record.layer
                 if layer_id not in self._loaded_layers:
                     return
                 self._loaded_layers[layer_id].on_realtime_update(message.record)
             elif isinstance(message, DeleteMessage):
+                log(f"Supabase DeleteMessage: {message.old_record_id}")
                 for layer in self._loaded_layers.values():
                     if layer.on_realtime_delete(message.old_record_id):
                         break

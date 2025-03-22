@@ -17,7 +17,7 @@ venv:
 # Run QGIS with the plugin folder set to the current directory
 [linux]
 run-qgis:
-    QGIS_PLUGINPATH=$(pwd) qgis &
+    JAKARTO_LAYERS_VERBOSE=1 QGIS_PLUGINPATH=$(pwd) qgis &
 
 # Install dependencies in the `jakarto_layers_qgis_plugin/vendor` folder
 vendorize:
