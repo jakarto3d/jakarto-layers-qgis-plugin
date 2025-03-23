@@ -10,6 +10,7 @@ from qgis.utils import iface
 from .constants import geometry_types, python_to_qmetatype, qmetatype_to_python
 from .converters import supabase_to_qgis_feature
 from .events_qgis import QGISDeleteEvent, QGISInsertEvent, QGISUpdateEvent
+from .logs import log
 from .supabase_feature import SupabaseFeature
 
 iface: QgisInterface
@@ -199,6 +200,8 @@ class Layer:
         if feature.id in self._supabase_id_to_qgis_id:
             return  # echo of a qgis_insert event
 
+        log(f"Supabase InsertMessage: {feature.id}")
+
         self.qgis_layer.startEditing()
         try:
             qgis_feature = supabase_to_qgis_feature(feature, self)
@@ -217,6 +220,8 @@ class Layer:
         if feature.id in self.manually_updated_supabase_ids:
             self.manually_updated_supabase_ids.remove(feature.id)
             return  # echo of a qgis_update event
+
+        log(f"Supabase UpdateMessage: {feature.id}")
 
         qgis_id = self._supabase_id_to_qgis_id.get(feature.id)
         if qgis_id is None:
@@ -253,6 +258,8 @@ class Layer:
         qgis_id = self._supabase_id_to_qgis_id.get(supabase_feature_id)
         if qgis_id is None:
             return False  # echo of a qgis_delete event
+
+        log(f"Supabase DeleteMessage: {supabase_feature_id}")
 
         self.qgis_layer.startEditing()
 

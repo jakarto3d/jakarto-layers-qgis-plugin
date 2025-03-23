@@ -195,19 +195,16 @@ class Adapter:
             if message is None:
                 return
             if isinstance(message, InsertMessage):
-                log(f"Supabase InsertMessage: {message.record.id}")
                 layer_id = message.record.layer
                 if layer_id not in self._loaded_layers:
                     return
                 self._loaded_layers[layer_id].on_realtime_insert(message.record)
             elif isinstance(message, UpdateMessage):
-                log(f"Supabase UpdateMessage: {message.record.id}")
                 layer_id = message.record.layer
                 if layer_id not in self._loaded_layers:
                     return
                 self._loaded_layers[layer_id].on_realtime_update(message.record)
             elif isinstance(message, DeleteMessage):
-                log(f"Supabase DeleteMessage: {message.old_record_id}")
                 for layer in self._loaded_layers.values():
                     if layer.on_realtime_delete(message.old_record_id):
                         break
