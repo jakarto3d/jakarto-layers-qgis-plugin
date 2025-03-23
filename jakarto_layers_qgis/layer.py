@@ -49,7 +49,7 @@ class Layer:
         if self._qgis_layer is None:
             # create the layer
             self._qgis_layer = QgsVectorLayer(
-                f"{geometry_types[self.geometry_type]}?crs=EPSG:4326",
+                f"{geometry_types[self.geometry_type]}?crs=EPSG:4326&index=yes",
                 self.name,
                 "memory",
             )
