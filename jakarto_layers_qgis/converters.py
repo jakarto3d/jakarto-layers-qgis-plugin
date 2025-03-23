@@ -1,13 +1,19 @@
 from __future__ import annotations
 
-import json
 import uuid
+from datetime import date, datetime
 from typing import TYPE_CHECKING, Any
 
-from qgis.core import Qgis, QgsFeature, QgsGeometry, QgsPoint, QgsVectorLayer
-from qgis.PyQt.QtCore import QVariant
+from qgis.core import (
+    Qgis,
+    QgsFeature,
+    QgsGeometry,
+    QgsPoint,
+    QgsVectorLayer,
+)
+from qgis.PyQt.QtCore import QDate, QDateTime, QVariant
 
-from .constants import qmetatype_to_python
+from .constants import geometry_types, qmetatype_to_python
 from .supabase_models import LayerAttribute, SupabaseFeature, SupabaseLayer
 
 if TYPE_CHECKING:
@@ -16,25 +22,51 @@ if TYPE_CHECKING:
 
 
 def qgis_to_supabase_feature(
-    feature: QgsFeature, supabase_layer_id: str, supabase_feature_id: str | None = None
+    feature: QgsFeature,
+    supabase_layer_id: str,
+    supabase_feature_id: str | None = None,
+    *,
+    feature_type: str | None = None,
+    attribute_names: list[str] | None = None,
 ) -> SupabaseFeature:
+    if attribute_names is None:
+        attribute_names = list(feature.attributeMap().keys())
+
     attributes = {}
-    for key, value in feature.attributeMap().items():
-        if QVariant() == value:
-            value = None
-        elif isinstance(value, (int, str, float, bool)):
+    null = QVariant()
+    for name, value in zip(attribute_names, feature.attributes()):
+        if isinstance(value, (int, str, float, bool)):
             pass
-        elif to_py := [f for f in dir(value) if f.startswith("toPy")]:
-            value = getattr(value, to_py[0])()
+        elif null == value:
+            value = None
+        elif isinstance(value, QDate):
+            value = value.toPyDate()
+        elif isinstance(value, QDateTime):
+            value = value.toPyDateTime()
         else:
-            raise ValueError(f"Unknown value type: {type(value)}")
-        attributes[key] = value
+            raise ValueError(f"Unknown value type: '{value!r}'")
+        attributes[name] = value
+
+    geometry = feature.geometry()
+    if feature_type is None:
+        feature_type = geometry.type().name.lower()  # type: ignore
+    else:
+        feature_type = feature_type.lower()
+    if feature_type != "point":
+        raise NotImplementedError(f"Geometry type {feature_type} not implemented")
+
+    point = geometry.vertexAt(0)
+    geom = {
+        "type": geometry_types[feature_type],
+        "coordinates": [point.x(), point.y(), point.z() if point.is3D() else None],
+    }
+    geom = geom_force3d(geom)
 
     return SupabaseFeature(
         id=supabase_feature_id or str(uuid.uuid4()),
         layer=supabase_layer_id,
         attributes=attributes,
-        geom=geom_force3d(json.loads(feature.geometry().asJson())),
+        geom=geom,
     )
 
 

@@ -5,7 +5,13 @@ import threading
 import traceback
 import uuid
 
-from qgis.core import QgsProject, QgsVectorLayer
+from qgis.core import (
+    Qgis,
+    QgsCoordinateReferenceSystem,
+    QgsFeatureRequest,
+    QgsProject,
+    QgsVectorLayer,
+)
 from qgis.gui import QgisInterface
 from qgis.utils import iface
 
@@ -122,13 +128,37 @@ class Adapter:
 
     def import_layer(self, layer: QgsVectorLayer) -> None:
         supabase_layer_id = str(uuid.uuid4())
-        supabase_features = [
-            qgis_to_supabase_feature(layer.getFeature(i), supabase_layer_id)
-            for i in range(layer.featureCount())
-        ]
+
+        target_crs = QgsCoordinateReferenceSystem("EPSG:4326")
+        context = QgsProject.instance().transformContext()
+
+        request = QgsFeatureRequest().setDestinationCrs(target_crs, context)
+        features = list(layer.getFeatures(request))
+        features = [f for f in features if not f.geometry().isNull()]
+
         postgrest_layer = qgis_layer_to_postgrest_layer(layer, supabase_layer_id)
+
+        supabase_features = []
+        feature_type = layer.geometryType().name  # type: ignore
+        for feature in features:
+            supabase_feature = qgis_to_supabase_feature(
+                feature,
+                supabase_layer_id,
+                feature_type=feature_type,
+                attribute_names=[a.name for a in postgrest_layer.attributes],
+            )
+            supabase_features.append(supabase_feature)
+
         self._postgrest_client.create_layer(postgrest_layer)
         self._postgrest_client.add_features(supabase_features)
+
+        # Show a toast notification to the user
+        iface.messageBar().pushMessage(
+            "Jakarto layers",
+            f"Imported {len(features)} features to '{postgrest_layer.name}' layer",
+            level=Qgis.MessageLevel.Info,
+            duration=5,  # Show for 5 seconds
+        )
 
     def add_layer(self, id_or_name: str | None) -> bool:
         if not (layer := self.get_layer(id_or_name)):

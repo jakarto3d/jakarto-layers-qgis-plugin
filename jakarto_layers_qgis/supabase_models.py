@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 from datetime import datetime, date
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, asdict
 from typing import Any
-import uuid
 
 from .constants import geometry_postgis_to_alias
 
 
 @dataclass
 class SupabaseFeature:
+    __slots__ = ("id", "layer", "attributes", "geom")
     id: str
     layer: str
     attributes: dict[str, Any]
@@ -52,6 +52,7 @@ class SupabaseFeature:
 
 @dataclass
 class LayerAttribute:
+    __slots__ = ("name", "type")
     name: str
     type: str
 
@@ -65,10 +66,11 @@ class LayerAttribute:
 
 @dataclass
 class SupabaseLayer:
+    __slots__ = ("id", "name", "geometry_type", "attributes")
+    id: str
     name: str
     geometry_type: str
     attributes: list[LayerAttribute]
-    id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
     def to_json(self) -> dict[str, Any]:
         return asdict(self)
