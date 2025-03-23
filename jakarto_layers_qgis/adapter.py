@@ -3,14 +3,16 @@ from __future__ import annotations
 import asyncio
 import threading
 import traceback
+import uuid
 
-from qgis.core import QgsProject
+from qgis.core import QgsProject, QgsVectorLayer
 from qgis.gui import QgisInterface
 from qgis.utils import iface
 
-from .supabase_session import SupabaseSession
 from .constants import anon_key, realtime_url
-from .converters import qgis_to_supabase_feature
+from .converters import qgis_layer_to_postgrest_layer, qgis_to_supabase_feature
+from .layer import Layer
+from .logs import log
 from .qgis_events import QGISDeleteEvent, QGISInsertEvent, QGISUpdateEvent
 from .supabase_events import (
     SupabaseDeleteMessage,
@@ -18,9 +20,9 @@ from .supabase_events import (
     SupabaseUpdateMessage,
     parse_message,
 )
-from .layer import Layer, LayerAttribute
-from .logs import log
+from .supabase_models import LayerAttribute
 from .supabase_postgrest import Postgrest
+from .supabase_session import SupabaseSession
 from .vendor.realtime import AsyncRealtimeClient
 
 iface: QgisInterface
@@ -118,6 +120,16 @@ class Adapter:
             return self._all_layers[self._qgis_id_to_supabase_id[id_or_name_or_qgis_id]]
         return None
 
+    def import_layer(self, layer: QgsVectorLayer) -> None:
+        supabase_layer_id = str(uuid.uuid4())
+        supabase_features = [
+            qgis_to_supabase_feature(layer.getFeature(i), supabase_layer_id)
+            for i in range(layer.featureCount())
+        ]
+        postgrest_layer = qgis_layer_to_postgrest_layer(layer, supabase_layer_id)
+        self._postgrest_client.create_layer(postgrest_layer)
+        self._postgrest_client.add_features(supabase_features)
+
     def add_layer(self, id_or_name: str | None) -> bool:
         if not (layer := self.get_layer(id_or_name)):
             return False
@@ -173,7 +185,11 @@ class Adapter:
                 await self._realtime.set_auth(self._session.access_token)
                 await (
                     self._realtime.channel("points")
-                    .on_postgres_changes("*", callback=self.on_supabase_realtime_event)
+                    .on_postgres_changes(
+                        "*",
+                        table="points",
+                        callback=self.on_supabase_realtime_event,
+                    )
                     .subscribe()
                 )
                 while not self._realtime_thread_event.is_set():

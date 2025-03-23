@@ -126,6 +126,23 @@ background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
         </property>
        </spacer>
       </item>
+      <item>
+       <widget class="QPushButton" name="layerImport">
+        <property name="toolTip">
+         <string>Import currently selected layer</string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset resource="resources.qrc">
+          <normaloff>:/resources/icons/import-regular-36.png</normaloff>:/resources/icons/import-regular-36.png</iconset>
+        </property>
+        <property name="flat">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
      </layout>
     </item>
     <item>

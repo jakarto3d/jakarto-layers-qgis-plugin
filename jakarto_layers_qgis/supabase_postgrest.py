@@ -9,7 +9,7 @@ from .constants import (
     geometry_types,
     postgrest_url,
 )
-from .supabase_feature import SupabaseFeature
+from .supabase_models import SupabaseFeature, SupabaseLayer
 from .supabase_session import SupabaseSession
 
 
@@ -57,6 +57,20 @@ class Postgrest:
         )
         response.raise_for_status()
 
+    def add_features(self, features: list[SupabaseFeature]) -> None:
+        geom_type = set(feature.geometry_type for feature in features)
+        if len(geom_type) != 1:
+            raise ValueError("All features must have the same geometry type")
+        if (geom := geom_type.pop()) != "point":
+            raise ValueError("Only point geometry type is supported")
+
+        response = self._request(
+            "POST",
+            geometry_type=geom,
+            json=[f.to_json() for f in features],
+        )
+        response.raise_for_status()
+
     def remove_feature(self, supabase_feature_id: str) -> None:
         response = self._request(
             "DELETE",
@@ -85,13 +99,21 @@ class Postgrest:
         )
         response.raise_for_status()
 
+    def create_layer(self, layer: SupabaseLayer) -> None:
+        response = self._request(
+            "POST",
+            table_name="layers",
+            json=layer.to_json(),
+        )
+        response.raise_for_status()
+
     def _request(
         self,
         method: str,
         *,
         table_name: str | None = None,
         geometry_type: str | None = None,
-        json: dict | None = None,
+        json=None,
         params: dict[str, Any] | None = None,
     ) -> requests.Response:
         if table_name is None and geometry_type is None:

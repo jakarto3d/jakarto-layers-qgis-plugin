@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable
 
-from qgis.core import QgsProject
+from qgis.core import QgsProject, Qgis
 from qgis.gui import QgisInterface
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtGui import QIcon
@@ -115,6 +115,7 @@ class Plugin:
         self.panel.layerList.itemDoubleClicked.connect(self.add_layer)
         self.panel.layerAdd.clicked.connect(self.add_layer)
         self.panel.layerRemove.clicked.connect(self.remove_layer)
+        self.panel.layerImport.clicked.connect(self.import_layer)
 
         QgsProject.instance().layersRemoved.connect(self.on_layers_removed)
 
@@ -148,9 +149,11 @@ class Plugin:
     def run(self) -> None:
         iface.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.panel)
 
-        self.adapter.fetch_layers()
+        self.reload_layers()
         self.adapter.start_realtime()
 
+    def reload_layers(self) -> None:
+        self.adapter.fetch_layers()
         self.panel.layerList.clear()
         self.panel.layerList.addItems(self.adapter.all_layer_names())
 
@@ -189,3 +192,15 @@ class Plugin:
         if self.adapter.remove_layer(self.get_selected_layer()):
             self.on_item_selection_changed()
             iface.mapCanvas().refresh()
+
+    def import_layer(self) -> None:
+        layer = iface.activeLayer()
+        if layer is None:
+            return
+        if not hasattr(layer, "geometryType"):
+            return
+        if layer.geometryType() != Qgis.GeometryType.Point:
+            return
+
+        self.adapter.import_layer(layer)
+        self.reload_layers()

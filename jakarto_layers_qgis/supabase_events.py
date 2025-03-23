@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from .supabase_feature import SupabaseFeature
+from .supabase_models import SupabaseFeature
 
 
 def parse_message(

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any, Callable, Iterable
 
 from qgis.core import QgsFeature, QgsField, QgsGeometry, QgsPoint, QgsVectorLayer
@@ -9,9 +8,9 @@ from qgis.utils import iface
 
 from .constants import geometry_types, python_to_qmetatype, qmetatype_to_python
 from .converters import supabase_to_qgis_feature
-from .qgis_events import QGISDeleteEvent, QGISInsertEvent, QGISUpdateEvent
 from .logs import log
-from .supabase_feature import SupabaseFeature
+from .qgis_events import QGISDeleteEvent, QGISInsertEvent, QGISUpdateEvent
+from .supabase_models import LayerAttribute, SupabaseFeature
 
 iface: QgisInterface
 
@@ -279,16 +278,3 @@ class Layer:
             iface.vectorLayerTools().stopEditing(self.qgis_layer)
 
         return True
-
-
-@dataclass
-class LayerAttribute:
-    name: str
-    type: str
-
-    @classmethod
-    def from_json(cls, json_data: dict[str, Any]) -> LayerAttribute:
-        return cls(
-            name=json_data["name"],
-            type=json_data["type"],
-        )

@@ -4,10 +4,11 @@ import json
 import uuid
 from typing import TYPE_CHECKING, Any
 
-from qgis.core import QgsFeature, QgsGeometry, QgsPoint
+from qgis.core import Qgis, QgsFeature, QgsGeometry, QgsPoint, QgsVectorLayer
 from qgis.PyQt.QtCore import QVariant
 
-from .supabase_feature import SupabaseFeature
+from .constants import qmetatype_to_python
+from .supabase_models import LayerAttribute, SupabaseFeature, SupabaseLayer
 
 if TYPE_CHECKING:
     # to avoid circular imports
@@ -69,3 +70,24 @@ def geom_force3d(geom: dict[str, Any]) -> dict[str, Any]:
 
     _recurse(geom["coordinates"])
     return geom
+
+
+def qgis_layer_to_postgrest_layer(
+    layer: QgsVectorLayer,
+    supabase_layer_id: str | None = None,
+) -> SupabaseLayer:
+    if layer.geometryType() != Qgis.GeometryType.Point:
+        raise ValueError("Only point layers are supported")
+
+    if supabase_layer_id is None:
+        supabase_layer_id = str(uuid.uuid4())
+
+    return SupabaseLayer(
+        id=supabase_layer_id,
+        name=layer.name(),
+        geometry_type="point",
+        attributes=[
+            LayerAttribute(name=a.name(), type=qmetatype_to_python[a.type()])
+            for a in layer.fields()
+        ],
+    )

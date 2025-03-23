@@ -3,5 +3,6 @@
     <file>icons/layer-plus-solid-36.png</file>
     <file>icons/layer-minus-regular-36.png</file>
     <file>icons/layer-solid-36.png</file>
+    <file>icons/import-regular-36.png</file>
   </qresource>
 </RCC>
