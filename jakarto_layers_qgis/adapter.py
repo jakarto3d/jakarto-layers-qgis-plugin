@@ -13,9 +13,9 @@ from .constants import anon_key, realtime_url
 from .converters import qgis_to_supabase_feature
 from .qgis_events import QGISDeleteEvent, QGISInsertEvent, QGISUpdateEvent
 from .supabase_events import (
-    DeleteMessage,
-    InsertMessage,
-    UpdateMessage,
+    SupabaseDeleteMessage,
+    SupabaseInsertMessage,
+    SupabaseUpdateMessage,
     parse_message,
 )
 from .layer import Layer, LayerAttribute
@@ -191,22 +191,20 @@ class Adapter:
 
     def on_supabase_realtime_event(self, event_data: dict) -> None:
         try:
-            message: InsertMessage | UpdateMessage | DeleteMessage | None = (
-                parse_message(event_data)
-            )
+            message = parse_message(event_data)
             if message is None:
                 return
-            if isinstance(message, InsertMessage):
+            if isinstance(message, SupabaseInsertMessage):
                 layer_id = message.record.layer
                 if layer_id not in self._loaded_layers:
                     return
                 self._loaded_layers[layer_id].on_realtime_insert(message.record)
-            elif isinstance(message, UpdateMessage):
+            elif isinstance(message, SupabaseUpdateMessage):
                 layer_id = message.record.layer
                 if layer_id not in self._loaded_layers:
                     return
                 self._loaded_layers[layer_id].on_realtime_update(message.record)
-            elif isinstance(message, DeleteMessage):
+            elif isinstance(message, SupabaseDeleteMessage):
                 for layer in self._loaded_layers.values():
                     if layer.on_realtime_delete(message.old_record_id):
                         break

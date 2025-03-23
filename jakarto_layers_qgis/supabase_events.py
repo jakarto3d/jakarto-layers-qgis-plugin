@@ -8,19 +8,19 @@ from .supabase_feature import SupabaseFeature
 
 def parse_message(
     message: dict,
-) -> InsertMessage | UpdateMessage | DeleteMessage | None:
+) -> SupabaseInsertMessage | SupabaseUpdateMessage | SupabaseDeleteMessage | None:
     type_ = message.get("data", {}).get("type")
     if type_ == "INSERT":
-        return InsertMessage.from_json(message)
+        return SupabaseInsertMessage.from_json(message)
     elif type_ == "UPDATE":
-        return UpdateMessage.from_json(message)
+        return SupabaseUpdateMessage.from_json(message)
     elif type_ == "DELETE":
-        return DeleteMessage.from_json(message)
+        return SupabaseDeleteMessage.from_json(message)
     return None
 
 
 @dataclass
-class InsertMessage:
+class SupabaseInsertMessage:
     table: str
     type: Literal["INSERT"]
     record: SupabaseFeature
@@ -30,7 +30,7 @@ class InsertMessage:
     commit_timestamp: str
 
     @classmethod
-    def from_json(cls, json_data: dict) -> InsertMessage:
+    def from_json(cls, json_data: dict) -> SupabaseInsertMessage:
         json_data = json_data["data"]
         if json_data["type"] != "INSERT":
             raise ValueError(f"Expected INSERT, got {json_data['type']}")
@@ -46,7 +46,7 @@ class InsertMessage:
 
 
 @dataclass
-class UpdateMessage:
+class SupabaseUpdateMessage:
     table: str
     type: Literal["UPDATE"]
     record: SupabaseFeature
@@ -57,7 +57,7 @@ class UpdateMessage:
     old_record: dict | None
 
     @classmethod
-    def from_json(cls, json_data: dict) -> UpdateMessage:
+    def from_json(cls, json_data: dict) -> SupabaseUpdateMessage:
         json_data = json_data["data"]
         if json_data["type"] != "UPDATE":
             raise ValueError(f"Expected UPDATE, got {json_data['type']}")
@@ -74,7 +74,7 @@ class UpdateMessage:
 
 
 @dataclass
-class DeleteMessage:
+class SupabaseDeleteMessage:
     table: str
     type: Literal["DELETE"]
     columns: list[dict[str, str]]
@@ -84,7 +84,7 @@ class DeleteMessage:
     old_record_id: str
 
     @classmethod
-    def from_json(cls, json_data: dict) -> DeleteMessage:
+    def from_json(cls, json_data: dict) -> SupabaseDeleteMessage:
         json_data = json_data["data"]
         if json_data["type"] != "DELETE":
             raise ValueError(f"Expected DELETE, got {json_data['type']}")

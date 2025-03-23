@@ -33,7 +33,7 @@ architecture-beta
 
 `Adapter` s'occupe d'écouter les évènements, transformer les features (`Converters`) et les passer soit à QGIS, soit à Supabase. Pour se connecter à QGIS, il utilise les fonctionnalités de plugin QGIS. Pour se connecter à Supabase, il utilise les librairies `postgrest` (pour les évènements de QGIS) et `realtime` (pour les évènements externes).
 
-Les features sont stockées en mémoire dans l'adapter dans un objet qui contient l'id QGIS et supabase pour pouvoir les associer.
+La correspondance entre les ids des features QGIS et Supabase sont stockées en mémoire dans la classe `Layer`.
 
 Il y a 6 types d'évènements:
 
@@ -46,8 +46,8 @@ Il y a 6 types d'évènements:
 
 Pour chaque évènement, l'adapter va transformer les features et les passer à l'autre service (soit QGIS, soit Supabase). Il doit aussi ignorer le prochain message, par exemple:
 
-- `qgis_insert_event` -> La feature est envoyée à Supabase
-- `supabase_insert_event` -> On reçoit un message, mais pour la même feature qui vient d'être créée, on ignore le message
+- `QGISInsertEvent` -> La feature est envoyée à Supabase
+- `SupabaseInsertMessage` -> On reçoit un message, mais pour la même feature qui vient d'être créée, on ignore le message
 
 ## Roadmap
 
