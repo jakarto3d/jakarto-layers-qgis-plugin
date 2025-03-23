@@ -1,0 +1,70 @@
+from __future__ import annotations
+
+import contextlib
+import time
+
+import requests
+
+from .constants import anon_key, auth_url
+
+
+class SupabaseSession:
+    # seconds, should be less than 1 hour (default token expiration time)
+    _session_max_age = 5 * 60
+
+    def __init__(self) -> None:
+        self._access_token = None
+        self._refresh_token = None
+        self._token_expires_at_timestamp: int | None = None
+        self._session: requests.Session | None = None
+        self._session_time = time.time()
+
+    @property
+    def session(self) -> requests.Session:
+        session_is_old = time.time() - self._session_time > self._session_max_age
+        if session_is_old and self._session:
+            with contextlib.suppress(Exception):
+                sess = self._session
+                self._session = None
+                sess.close()
+        if self._session is None:
+            self._session = requests.Session()
+            self._session_time = time.time()
+            self._get_token()
+        return self._session
+
+    def request(self, method: str, url: str, **kwargs) -> requests.Response:
+        return self.session.request(method, url, **kwargs)
+
+    @property
+    def access_token(self) -> str | None:
+        self.session  # refresh token if needed
+        return self._access_token
+
+    def _get_token(self) -> None:
+        if not self._refresh_token:
+            json_data = {"email": "someone@jakarto.com", "password": "password"}
+            params = {"grant_type": "password"}
+        else:
+            json_data = {"refresh_token": self._refresh_token}
+            params = {"grant_type": "refresh_token"}
+
+        response = self.session.post(
+            auth_url,
+            json=json_data,
+            params=params,
+            headers={"apiKey": anon_key},
+        )
+        response.raise_for_status()
+        data = response.json()
+        self._access_token = data["access_token"]
+        self._refresh_token = data["refresh_token"]
+        self._token_expires_at_timestamp = data["expires_at"]
+
+    def __del__(self) -> None:
+        self.close()
+
+    def close(self) -> None:
+        if self._session:
+            self._session.close()
+            self._session = None

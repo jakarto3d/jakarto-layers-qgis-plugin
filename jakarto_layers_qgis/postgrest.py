@@ -1,30 +1,21 @@
 from __future__ import annotations
 
-import contextlib
-import time
 from typing import Any
 
 import requests
 
 from .constants import (
     anon_key,
-    auth_url,
     geometry_types,
     postgrest_url,
 )
 from .supabase_feature import SupabaseFeature
+from .supabase_session import SupabaseSession
 
 
 class Postgrest:
-    # seconds, should be less than 1 hour (default token expiration time)
-    _session_max_age = 5 * 60
-
-    def __init__(self) -> None:
-        self._access_token = None
-        self._refresh_token = None
-        self._token_expires_at_timestamp: int | None = None
-        self._session: requests.Session | None = None
-        self._session_time = time.time()
+    def __init__(self, session: SupabaseSession) -> None:
+        self._session = session
 
     def get_layers(self) -> list[tuple]:
         response = self._request("GET", table_name="layers")
@@ -107,56 +98,14 @@ class Postgrest:
             raise ValueError("Either table_name or geometry_type must be provided")
         if table_name is None:
             table_name = f"{geometry_type}s"
-        response = self.session.request(
+        response = self._session.request(
             method,
             f"{postgrest_url}/{table_name}",
             params=params,
             json=json,
             headers={
-                "Authorization": f"Bearer {self._access_token}",
+                "Authorization": f"Bearer {self._session.access_token}",
                 "apiKey": anon_key,
             },
         )
         return response
-
-    @property
-    def session(self) -> requests.Session:
-        session_is_old = time.time() - self._session_time > self._session_max_age
-        if session_is_old and self._session:
-            with contextlib.suppress(Exception):
-                sess = self._session
-                self._session = None
-                sess.close()
-        if self._session is None:
-            self._session = requests.Session()
-            self._session_time = time.time()
-            self._get_token()
-        return self._session
-
-    def _get_token(self) -> None:
-        if not self._refresh_token:
-            json_data = {"email": "someone@jakarto.com", "password": "password"}
-            params = {"grant_type": "password"}
-        else:
-            json_data = {"refresh_token": self._refresh_token}
-            params = {"grant_type": "refresh_token"}
-
-        response = self.session.post(
-            auth_url,
-            json=json_data,
-            params=params,
-            headers={"apiKey": anon_key},
-        )
-        response.raise_for_status()
-        data = response.json()
-        self._access_token = data["access_token"]
-        self._refresh_token = data["refresh_token"]
-        self._token_expires_at_timestamp = data["expires_at"]
-
-    def __del__(self) -> None:
-        self.close()
-
-    def close(self) -> None:
-        if self._session:
-            self._session.close()
-            self._session = None

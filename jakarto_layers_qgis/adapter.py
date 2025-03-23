@@ -8,6 +8,7 @@ from qgis.core import QgsProject
 from qgis.gui import QgisInterface
 from qgis.utils import iface
 
+from .supabase_session import SupabaseSession
 from .constants import anon_key, realtime_url
 from .converters import qgis_to_supabase_feature
 from .events_qgis import QGISDeleteEvent, QGISInsertEvent, QGISUpdateEvent
@@ -30,7 +31,8 @@ class Adapter:
         self._loaded_layers: dict[str, Layer] = {}
         self._qgis_id_to_supabase_id: dict[str, str] = {}
         self._all_layers: dict[str, Layer] = {}
-        self._postgrest_client = Postgrest()
+        self._session = SupabaseSession()
+        self._postgrest_client = Postgrest(self._session)
         self._realtime: AsyncRealtimeClient | None = None
         self._realtime_thread_event = threading.Event()
 
@@ -88,7 +90,7 @@ class Adapter:
 
         if layer_attributes_modified:
             self._postgrest_client.update_attributes(
-                layer.supabase_layer_id,
+                layer_id,
                 [{"name": a.name, "type": a.type} for a in layer.attributes],
             )
 
@@ -168,7 +170,7 @@ class Adapter:
             async def _run_realtime():
                 self._realtime = AsyncRealtimeClient(realtime_url, token=anon_key)
                 await self._realtime.connect()
-                await self._realtime.set_auth(self._postgrest_client._access_token)
+                await self._realtime.set_auth(self._session.access_token)
                 await (
                     self._realtime.channel("points")
                     .on_postgres_changes("*", callback=self.on_supabase_realtime_event)
@@ -213,3 +215,11 @@ class Adapter:
 
     def stop_realtime(self) -> None:
         self._realtime_thread_event.set()
+        self._realtime = None
+
+    def __del__(self) -> None:
+        self.close()
+
+    def close(self) -> None:
+        self.stop_realtime()
+        self._session.close()
