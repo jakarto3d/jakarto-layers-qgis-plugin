@@ -80,6 +80,9 @@ class Layer:
             )
             self._qgis_layer.afterCommitChanges.connect(self.after_commit)
 
+            # ignore warning about memory layers on quit
+            self._qgis_layer.setCustomProperty("skipMemoryLayersCheck", 1)
+
         return self._qgis_layer
 
     def add_feature_id(self, qgis_id: int, supabase_id: str) -> None:
