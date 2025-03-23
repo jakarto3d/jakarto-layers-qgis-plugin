@@ -9,7 +9,7 @@ from qgis.utils import iface
 
 from .constants import geometry_types, python_to_qmetatype, qmetatype_to_python
 from .converters import supabase_to_qgis_feature
-from .events_qgis import QGISDeleteEvent, QGISInsertEvent, QGISUpdateEvent
+from .qgis_events import QGISDeleteEvent, QGISInsertEvent, QGISUpdateEvent
 from .logs import log
 from .supabase_feature import SupabaseFeature
 

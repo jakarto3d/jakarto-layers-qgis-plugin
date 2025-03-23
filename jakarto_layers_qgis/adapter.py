@@ -11,8 +11,8 @@ from qgis.utils import iface
 from .supabase_session import SupabaseSession
 from .constants import anon_key, realtime_url
 from .converters import qgis_to_supabase_feature
-from .events_qgis import QGISDeleteEvent, QGISInsertEvent, QGISUpdateEvent
-from .events_realtime import (
+from .qgis_events import QGISDeleteEvent, QGISInsertEvent, QGISUpdateEvent
+from .supabase_events import (
     DeleteMessage,
     InsertMessage,
     UpdateMessage,
@@ -20,7 +20,7 @@ from .events_realtime import (
 )
 from .layer import Layer, LayerAttribute
 from .logs import log
-from .postgrest import Postgrest
+from .supabase_postgrest import Postgrest
 from .vendor.realtime import AsyncRealtimeClient
 
 iface: QgisInterface
