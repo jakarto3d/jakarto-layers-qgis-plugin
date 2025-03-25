@@ -184,6 +184,15 @@ class Adapter:
         QgsProject.instance().removeMapLayer(layer.qgis_layer)
         return True
 
+    def drop_layer(self, id_or_name: str | None) -> bool:
+        if not (layer := self.get_layer(id_or_name)):
+            return False
+        if layer.supabase_layer_id not in self._all_layers:
+            return False
+        self._postgrest_client.drop_layer(layer.supabase_layer_id)
+        self._all_layers.pop(layer.supabase_layer_id, None)
+        return True
+
     def on_layers_removed(self, qgis_ids: list[str]) -> bool:
         """Called when layers are removed from the map (not by the plugin)."""
         removed = False

@@ -3,11 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable
 
-from qgis.core import QgsProject, Qgis
+from qgis.core import Qgis, QgsProject
 from qgis.gui import QgisInterface
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction, QWidget
+from qgis.PyQt.QtWidgets import QAction, QMenu, QWidget
 from qgis.utils import iface
 
 from .adapter import Adapter
@@ -113,6 +113,12 @@ class Plugin:
             self.on_item_selection_changed
         )
         self.panel.layerList.itemDoubleClicked.connect(self.add_layer)
+        self.panel.layerList.setContextMenuPolicy(
+            Qt.ContextMenuPolicy.CustomContextMenu
+        )
+        self.panel.layerList.customContextMenuRequested.connect(
+            self.show_layer_context_menu
+        )
         self.panel.layerAdd.clicked.connect(self.add_layer)
         self.panel.layerRemove.clicked.connect(self.remove_layer)
         self.panel.layerImport.clicked.connect(self.import_layer)
@@ -126,6 +132,31 @@ class Plugin:
             parent=iface.mainWindow(),
         )
         self.toolbar.addAction(action)
+
+    def show_layer_context_menu(self, position):
+        item = self.panel.layerList.itemAt(position)
+        if item is None:
+            return
+
+        menu = QMenu()
+        add_action = menu.addAction("Add Layer")
+        add_action.setToolTip("Add layer to the map")
+        add_action.setEnabled(self.panel.layerAdd.isEnabled())
+        remove_action = menu.addAction("Remove Layer")
+        remove_action.setToolTip("Remove layer from the map")
+        remove_action.setEnabled(self.panel.layerRemove.isEnabled())
+        menu.addSeparator()
+        drop_action = menu.addAction("Drop Layer")
+        drop_action.setToolTip("Drop layer from the database (cannot be undone)")
+
+        action = menu.exec_(self.panel.layerList.mapToGlobal(position))
+
+        if action == add_action:
+            self.add_layer(item)
+        elif action == remove_action:
+            self.remove_layer()
+        elif action == drop_action:
+            self.drop_layer(item)
 
     def onClosePlugin(self) -> None:  # noqa N802
         """Cleanup necessary items here when plugin dockwidget is closed"""
@@ -192,6 +223,14 @@ class Plugin:
         if self.adapter.remove_layer(self.get_selected_layer()):
             self.on_item_selection_changed()
             iface.mapCanvas().refresh()
+
+    def drop_layer(self, value) -> None:
+        layer_name = self.get_selected_layer(value)
+        self.adapter.remove_layer(layer_name)
+        self.adapter.drop_layer(layer_name)
+        self.reload_layers()
+        self.on_item_selection_changed()
+        iface.mapCanvas().refresh()
 
     def import_layer(self) -> None:
         layer = iface.activeLayer()

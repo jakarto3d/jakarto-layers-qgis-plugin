@@ -19,3 +19,4 @@ class MainPanel(QDockWidget, FORM_CLASS):
         self.layerList: QListWidget
         self.layerAdd: QPushButton
         self.layerRemove: QPushButton
+        self.layerImport: QPushButton

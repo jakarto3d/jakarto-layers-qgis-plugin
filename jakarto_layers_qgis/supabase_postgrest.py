@@ -107,6 +107,14 @@ class Postgrest:
         )
         response.raise_for_status()
 
+    def drop_layer(self, layer_id: str) -> None:
+        response = self._request(
+            "DELETE",
+            table_name="layers",
+            params={"id": f"eq.{layer_id}"},
+        )
+        response.raise_for_status()
+
     def _request(
         self,
         method: str,
