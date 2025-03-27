@@ -4,6 +4,7 @@ import asyncio
 import threading
 import traceback
 import uuid
+from typing import Any, Callable
 
 from qgis.core import (
     Qgis,
@@ -26,7 +27,7 @@ from .supabase_events import (
     SupabaseUpdateMessage,
     parse_message,
 )
-from .supabase_models import LayerAttribute
+from .supabase_models import LayerAttribute, SupabaseFeature
 from .supabase_postgrest import Postgrest
 from .supabase_session import SupabaseSession
 from .vendor.realtime import AsyncRealtimeClient
@@ -160,20 +161,30 @@ class Adapter:
             duration=5,  # Show for 5 seconds
         )
 
-    def add_layer(self, id_or_name: str | None) -> bool:
+    def add_layer(
+        self, id_or_name: str | None, callback: Callable[[bool], Any]
+    ) -> None:
         if not (layer := self.get_layer(id_or_name)):
-            return False
+            callback(False)
+            return
         if layer.supabase_layer_id in self._loaded_layers:
-            return False
+            callback(False)
+            return
 
-        features = self._postgrest_client.get_features(
-            layer.geometry_type, layer.supabase_layer_id
+        def _sub_callback(features: list[SupabaseFeature]) -> None:
+            layer.add_features_on_load(features)
+            QgsProject.instance().addMapLayer(layer.qgis_layer, addToLegend=True)
+            self._loaded_layers[layer.supabase_layer_id] = layer
+            self._qgis_id_to_supabase_id[layer.qgis_layer.id()] = (
+                layer.supabase_layer_id
+            )
+            callback(True)
+
+        self._postgrest_client.get_features(
+            layer.geometry_type,
+            layer.supabase_layer_id,
+            callback=_sub_callback,
         )
-        layer.add_features_on_load(features)
-        QgsProject.instance().addMapLayer(layer.qgis_layer, addToLegend=True)
-        self._loaded_layers[layer.supabase_layer_id] = layer
-        self._qgis_id_to_supabase_id[layer.qgis_layer.id()] = layer.supabase_layer_id
-        return True
 
     def remove_layer(self, id_or_name: str | None) -> bool:
         if not (layer := self.get_layer(id_or_name)):

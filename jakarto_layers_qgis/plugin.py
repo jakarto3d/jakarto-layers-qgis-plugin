@@ -211,13 +211,16 @@ class Plugin:
 
     def add_layer(self, value) -> None:
         layer_name = self.get_selected_layer(value)
-        if self.adapter.add_layer(layer_name):
-            self.on_item_selection_changed()
-            iface.mapCanvas().refresh()
 
-        layer = self.adapter.get_layer(layer_name)
-        if layer is not None:
-            iface.setActiveLayer(layer.qgis_layer)
+        def _sub_callback(success: bool) -> None:
+            if success:
+                self.on_item_selection_changed()
+                iface.mapCanvas().refresh()
+            layer = self.adapter.get_layer(layer_name)
+            if layer is not None:
+                iface.setActiveLayer(layer.qgis_layer)
+
+        self.adapter.add_layer(layer_name, _sub_callback)
 
     def remove_layer(self) -> None:
         if self.adapter.remove_layer(self.get_selected_layer()):

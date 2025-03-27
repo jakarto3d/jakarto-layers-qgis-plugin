@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable, overload
 
+from queue import Queue
 import requests
+from qgis.core import QgsApplication, QgsMessageLog, QgsTask
 
 from .constants import (
     anon_key,
@@ -12,14 +14,17 @@ from .constants import (
 from .supabase_models import SupabaseFeature, SupabaseLayer
 from .supabase_session import SupabaseSession
 
+DEFAULT_TIMEOUT = 5
+
 
 class Postgrest:
     def __init__(self, session: SupabaseSession) -> None:
         self._session = session
+        self._tasks = Queue(maxsize=100)
 
     def get_layers(self) -> list[tuple]:
         response = self._request("GET", table_name="layers")
-        response.raise_for_status()
+        response.raise_for_status()  # type: ignore
         layers = [
             (
                 layer["name"],
@@ -32,22 +37,25 @@ class Postgrest:
         return sorted(layers, key=lambda x: x[0])
 
     def get_features(
-        self, geometry_type: str, layer_id: str, params: dict[str, Any] | None = None
-    ) -> list[SupabaseFeature]:
+        self,
+        geometry_type: str,
+        layer_id: str,
+        callback: Callable[[list[SupabaseFeature]], Any],
+    ) -> None:
         if geometry_type not in geometry_types:
             raise ValueError(f"Invalid geometry type: {geometry_type}")
 
-        if params is None:
-            params = {}
+        def _sub_callback(result: list) -> None:
+            features = [SupabaseFeature.from_json(feature) for feature in result]
+            callback(features)
 
-        params["layer"] = f"eq.{layer_id}"
-        response = self._request(
+        self._request(
             "GET",
             geometry_type=geometry_type,
-            params=params,
+            params={"layer": f"eq.{layer_id}"},
+            callback=_sub_callback,
+            timeout=30,
         )
-        response.raise_for_status()
-        return [SupabaseFeature.from_json(feature) for feature in response.json()]
 
     def add_feature(self, feature: SupabaseFeature) -> None:
         response = self._request(
@@ -68,6 +76,7 @@ class Postgrest:
             "POST",
             geometry_type=geom,
             json=[f.to_json() for f in features],
+            timeout=30,
         )
         response.raise_for_status()
 
@@ -115,27 +124,94 @@ class Postgrest:
         )
         response.raise_for_status()
 
+    @overload
     def _request(
         self,
         method: str,
         *,
+        callback: None = None,
         table_name: str | None = None,
         geometry_type: str | None = None,
         json=None,
         params: dict[str, Any] | None = None,
-    ) -> requests.Response:
+        timeout: int = DEFAULT_TIMEOUT,
+    ) -> requests.Response: ...
+
+    @overload
+    def _request(
+        self,
+        method: str,
+        *,
+        callback: Callable,
+        table_name: str | None = None,
+        geometry_type: str | None = None,
+        json=None,
+        params: dict[str, Any] | None = None,
+        timeout: int = DEFAULT_TIMEOUT,
+    ) -> None: ...
+
+    def _request(
+        self,
+        method: str,
+        *,
+        callback: Callable | None = None,
+        table_name: str | None = None,
+        geometry_type: str | None = None,
+        json=None,
+        params: dict[str, Any] | None = None,
+        timeout: int = DEFAULT_TIMEOUT,
+    ) -> requests.Response | None:
         if table_name is None and geometry_type is None:
             raise ValueError("Either table_name or geometry_type must be provided")
         if table_name is None:
             table_name = f"{geometry_type}s"
-        response = self._session.request(
-            method,
-            f"{postgrest_url}/{table_name}",
-            params=params,
-            json=json,
-            headers={
+
+        args = {
+            "method": method,
+            "url": f"{postgrest_url}/{table_name}",
+            "params": params,
+            "json": json,
+            "headers": {
                 "Authorization": f"Bearer {self._session.access_token}",
                 "apiKey": anon_key,
             },
+            "timeout": timeout,
+        }
+        if callback is None:
+            return self._session.request(**args)
+
+        task = _WebRequestTask(
+            description=f"Fetching features from {table_name}",
+            args=args,
+            callback=callback,
         )
-        return response
+        self._queue_task(task)
+        return None
+
+    def _queue_task(self, task: QgsTask) -> None:
+        self._tasks.put(task)
+        QgsApplication.taskManager().addTask(task)
+
+
+class _WebRequestTask(QgsTask):
+    def __init__(
+        self,
+        description: str,
+        args: dict[str, Any],
+        callback: Callable,
+    ):
+        super().__init__(description, QgsTask.Flag.CanCancel)
+        self.args = args
+        self.response = None
+        self.callback = callback
+        self._result = None
+
+    def run(self):
+        response = requests.request(**self.args)
+        response.raise_for_status()
+        self._result = response.json()
+        return True
+
+    def finished(self, result: bool):
+        if result and self._result:
+            self.callback(self._result)
