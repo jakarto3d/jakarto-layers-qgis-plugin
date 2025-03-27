@@ -7,7 +7,7 @@ from qgis.core import Qgis, QgsProject
 from qgis.gui import QgisInterface
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction, QMenu, QWidget
+from qgis.PyQt.QtWidgets import QAction, QMenu, QTreeWidgetItem, QWidget
 from qgis.utils import iface
 
 from .adapter import Adapter
@@ -109,14 +109,14 @@ class Plugin:
         self.toolbar = iface.addToolBar("Jakarto Layers")
         self.toolbar.setObjectName("JakartoLayers")
 
-        self.panel.layerList.itemSelectionChanged.connect(
+        self.panel.layerTree.itemSelectionChanged.connect(
             self.on_item_selection_changed
         )
-        self.panel.layerList.itemDoubleClicked.connect(self.add_layer)
-        self.panel.layerList.setContextMenuPolicy(
+        self.panel.layerTree.itemDoubleClicked.connect(self.add_layer)
+        self.panel.layerTree.setContextMenuPolicy(
             Qt.ContextMenuPolicy.CustomContextMenu
         )
-        self.panel.layerList.customContextMenuRequested.connect(
+        self.panel.layerTree.customContextMenuRequested.connect(
             self.show_layer_context_menu
         )
         self.panel.layerAdd.clicked.connect(self.add_layer)
@@ -134,7 +134,7 @@ class Plugin:
         self.toolbar.addAction(action)
 
     def show_layer_context_menu(self, position):
-        item = self.panel.layerList.itemAt(position)
+        item = self.panel.layerTree.itemAt(position)
         if item is None:
             return
 
@@ -149,7 +149,7 @@ class Plugin:
         drop_action = menu.addAction("Drop Layer")
         drop_action.setToolTip("Drop layer from the database (cannot be undone)")
 
-        action = menu.exec_(self.panel.layerList.mapToGlobal(position))
+        action = menu.exec_(self.panel.layerTree.mapToGlobal(position))
 
         if action == add_action:
             self.add_layer(item)
@@ -185,14 +185,25 @@ class Plugin:
 
     def reload_layers(self) -> None:
         self.adapter.fetch_layers()
-        self.panel.layerList.clear()
-        self.panel.layerList.addItems(self.adapter.all_layer_names())
+        self.panel.layerTree.clear()
+        for name, type_, srid in self.adapter.all_layer_properties():
+            item = QTreeWidgetItem()
+            item.setText(0, name)
+            font = item.font(0)
+            font.setBold(True)
+            item.setFont(0, font)
+            item.setText(1, type_)
+            item.setText(2, str(srid))
+            self.panel.layerTree.addTopLevelItem(item)
+        self.panel.layerTree.resizeColumnToContents(0)
+        self.panel.layerTree.resizeColumnToContents(1)
+        self.panel.layerTree.resizeColumnToContents(2)
 
     def get_selected_layer(self, value=None) -> str | None:
         if value is not None and hasattr(value, "text"):
             return value.text()
-        current = self.panel.layerList.currentItem()
-        return current.text() if current else None
+        current = self.panel.layerTree.currentItem()
+        return current.text(0) if current else None
 
     def on_item_selection_changed(self) -> None:
         add_enabled, remove_enabled = True, True

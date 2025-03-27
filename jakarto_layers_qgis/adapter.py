@@ -115,6 +115,13 @@ class Adapter:
     def all_layer_names(self) -> list[str]:
         return [layer.name for layer in self._all_layers.values()]
 
+    def all_layer_properties(self):
+        """For display in the layer tree."""
+        return [
+            (layer.name, layer.geometry_type, layer.supabase_srid)
+            for layer in self._all_layers.values()
+        ]
+
     def get_layer(self, id_or_name_or_qgis_id: str | None) -> Layer | None:
         if id_or_name_or_qgis_id is None:
             return None
