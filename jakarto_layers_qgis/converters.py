@@ -64,7 +64,7 @@ def qgis_to_supabase_feature(
 
     return SupabaseFeature(
         id=supabase_feature_id or str(uuid.uuid4()),
-        layer=supabase_layer_id,
+        layer_id=supabase_layer_id,
         attributes=attributes,
         geom=geom,
     )

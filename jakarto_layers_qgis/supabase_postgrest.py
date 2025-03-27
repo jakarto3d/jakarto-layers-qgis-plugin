@@ -52,7 +52,7 @@ class Postgrest:
         self._request(
             "GET",
             geometry_type=geometry_type,
-            params={"layer": f"eq.{layer_id}"},
+            params={"layer_id": f"eq.{layer_id}"},
             callback=_sub_callback,
             timeout=30,
         )

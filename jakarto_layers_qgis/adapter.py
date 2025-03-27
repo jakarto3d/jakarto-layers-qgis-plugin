@@ -261,12 +261,12 @@ class Adapter:
             if message is None:
                 return
             if isinstance(message, SupabaseInsertMessage):
-                layer_id = message.record.layer
+                layer_id = message.record.layer_id
                 if layer_id not in self._loaded_layers:
                     return
                 self._loaded_layers[layer_id].on_realtime_insert(message.record)
             elif isinstance(message, SupabaseUpdateMessage):
-                layer_id = message.record.layer
+                layer_id = message.record.layer_id
                 if layer_id not in self._loaded_layers:
                     return
                 self._loaded_layers[layer_id].on_realtime_update(message.record)
