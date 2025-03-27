@@ -32,6 +32,7 @@ class Postgrest:
                 layer["geometry_type"],
                 layer["srid"],
                 layer["attributes"] or [],
+                layer["parent_id"],
             )
             for layer in response.json()
         ]

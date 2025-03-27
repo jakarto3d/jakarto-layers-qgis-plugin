@@ -23,10 +23,12 @@ class Layer:
         geometry_type: str,
         supabase_srid: int,
         attributes: list[LayerAttribute] | None,
+        supabase_parent_layer_id: str | None,
         commit_callback: Callable,
     ) -> None:
         self.name = name
         self.supabase_layer_id = supabase_layer_id
+        self.supabase_parent_layer_id = supabase_parent_layer_id
         self.geometry_type = geometry_type
         self.supabase_srid = supabase_srid
         self.attributes: list[LayerAttribute] = attributes or []

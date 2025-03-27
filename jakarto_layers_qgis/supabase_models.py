@@ -52,7 +52,6 @@ class SupabaseFeature:
 
 @dataclass
 class LayerAttribute:
-    __slots__ = ("name", "type")
     name: str
     type: str
 
@@ -66,12 +65,12 @@ class LayerAttribute:
 
 @dataclass
 class SupabaseLayer:
-    __slots__ = ("id", "name", "geometry_type", "attributes", "srid")
     id: str
     name: str
     geometry_type: str
     attributes: list[LayerAttribute]
     srid: int
+    parent_id: str | None
 
     def to_json(self) -> dict[str, Any]:
         return asdict(self)

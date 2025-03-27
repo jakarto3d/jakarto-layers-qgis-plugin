@@ -54,9 +54,10 @@ class Adapter:
                 geometry_type,
                 srid,
                 attributes=[LayerAttribute.from_json(a) for a in attributes],
+                supabase_parent_layer_id=parent_id,
                 commit_callback=self._commit_callback,
             )
-            for name, id_, geometry_type, srid, attributes in self._postgrest_client.get_layers()
+            for name, id_, geometry_type, srid, attributes, parent_id in self._postgrest_client.get_layers()
         }
 
     def _commit_callback(
