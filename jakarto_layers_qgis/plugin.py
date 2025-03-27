@@ -267,6 +267,15 @@ class Plugin:
         if layer is None or layer.qgis_layer is None:
             return
 
+        if layer.supabase_parent_layer_id is not None:
+            QMessageBox.warning(
+                iface.mainWindow(),
+                "Already a sub-layer",
+                "This layer is already a sub-layer, "
+                "you cannot create a sub-layer from it.",
+            )
+            return
+
         # Check for selected features before showing dialog
         selected_count = layer.qgis_layer.selectedFeatureCount()
         if selected_count == 0:
