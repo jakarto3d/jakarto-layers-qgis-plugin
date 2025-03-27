@@ -155,14 +155,27 @@ class Adapter:
         features: list[QgsFeature],
         *,
         layer_name: str | None = None,
+        parent_layer: Layer | None = None,
     ) -> tuple[SupabaseLayer, list[SupabaseFeature]]:
+        """Create a new supabase layer from a list of qgis features.
+
+        Args:
+            layer: The qgis layer to create the supabase layer from
+            features: The features to create the supabase layer from
+            layer_name: The name of the supabase layer
+            parent_layer: The parent layer of the supabase layer (to create a sub-layer)
+
+        Returns:
+            A tuple containing the supabase layer and the list of supabase features
+        """
+        # get the srid from the layer
+        # must correspond with supported crs in jakproj
         srid = layer.crs().authid()
         try:
             srid = int(srid.split(":")[-1])
         except Exception:
             raise ValueError(f"Unsupported CRS: {srid}")
 
-        # must correspond with supported crs in jakproj
         allowed_srids = list(
             chain(
                 range(2945, 2953),  # NAD83(CSRS) / MTM
@@ -177,13 +190,11 @@ class Adapter:
         )
         if srid not in allowed_srids:
             raise ValueError(f"Unsupported CRS: {srid}")
-
         # reproject to a known CRS ?
         # target_crs = QgsCoordinateReferenceSystem("EPSG:4326")
         # context = QgsProject.instance().transformContext()
         # request = QgsFeatureRequest().setDestinationCrs(target_crs, context)
         # features = list(layer.getFeatures(request))
-
         supabase_layer_id = str(uuid.uuid4())
         postgrest_layer = qgis_layer_to_postgrest_layer(
             layer, supabase_layer_id, srid=srid, layer_name=layer_name
@@ -198,7 +209,16 @@ class Adapter:
                 feature_type=feature_type,
                 attribute_names=[a.name for a in postgrest_layer.attributes],
             )
+            if parent_layer is not None:
+                # set the parent id for the supabase feature (for sub-layers)
+                supabase_feature.parent_id = parent_layer.get_supabase_feature_id(
+                    feature.id()
+                )
             supabase_features.append(supabase_feature)
+
+        if parent_layer is not None:
+            # set the parent id for the supabase layer (for sub-layers)
+            postgrest_layer.parent_id = parent_layer.supabase_layer_id
 
         return postgrest_layer, supabase_features
 
@@ -363,9 +383,11 @@ class Adapter:
             return
 
         postgrest_layer, supabase_features = self._supabase_layer_from_qgis_features(
-            parent_layer.qgis_layer, selected_features, layer_name=new_layer_name
+            parent_layer.qgis_layer,
+            selected_features,
+            layer_name=new_layer_name,
+            parent_layer=parent_layer,
         )
-        postgrest_layer.parent_id = parent_layer.supabase_layer_id
 
         self._postgrest_client.create_layer(postgrest_layer)
         self._postgrest_client.add_features(supabase_features)

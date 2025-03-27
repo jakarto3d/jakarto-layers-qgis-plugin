@@ -9,11 +9,11 @@ from .constants import geometry_postgis_to_alias
 
 @dataclass
 class SupabaseFeature:
-    __slots__ = ("id", "layer_id", "attributes", "geom")
     id: str
     layer_id: str
     attributes: dict[str, Any]
     geom: dict[str, Any]
+    parent_id: str | None = None
 
     @classmethod
     def from_json(cls, json_data: dict[str, Any]) -> SupabaseFeature:
@@ -22,6 +22,7 @@ class SupabaseFeature:
             layer_id=json_data["layer_id"],
             attributes=json_data.get("attributes", {}),
             geom=json_data["geom"],
+            parent_id=json_data.get("parent_id"),
         )
 
     def to_json(self) -> dict[str, Any]:
@@ -33,6 +34,8 @@ class SupabaseFeature:
             },
             "geom": self.geom,
         }
+        if self.parent_id is not None:
+            data["parent_id"] = self.parent_id
         return data
 
     def _jsonize_value(self, value: Any) -> Any:
