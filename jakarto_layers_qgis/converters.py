@@ -108,7 +108,9 @@ def qgis_layer_to_postgrest_layer(
     layer: QgsVectorLayer,
     supabase_layer_id: str | None = None,
     *,
+    layer_name: str | None = None,
     srid: int,
+    parent_id: str | None = None,
 ) -> SupabaseLayer:
     if layer.geometryType() != Qgis.GeometryType.Point:
         raise ValueError("Only point layers are supported")
@@ -116,13 +118,17 @@ def qgis_layer_to_postgrest_layer(
     if supabase_layer_id is None:
         supabase_layer_id = str(uuid.uuid4())
 
+    if layer_name is None:
+        layer_name = layer.name()
+
     return SupabaseLayer(
         id=supabase_layer_id,
-        name=layer.name(),
+        name=layer_name,
         geometry_type="point",
         attributes=[
             LayerAttribute(name=a.name(), type=qmetatype_to_python[a.type()])
             for a in layer.fields()
         ],
         srid=srid,
+        parent_id=parent_id,
     )

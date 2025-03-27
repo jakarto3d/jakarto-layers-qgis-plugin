@@ -1,16 +1,15 @@
 from __future__ import annotations
 
 import asyncio
-from itertools import chain
 import threading
 import traceback
 import uuid
+from itertools import chain
 from typing import Any, Callable
 
 from qgis.core import (
     Qgis,
-    QgsCoordinateReferenceSystem,
-    QgsFeatureRequest,
+    QgsFeature,
     QgsProject,
     QgsVectorLayer,
 )
@@ -28,7 +27,7 @@ from .supabase_events import (
     SupabaseUpdateMessage,
     parse_message,
 )
-from .supabase_models import LayerAttribute, SupabaseFeature
+from .supabase_models import LayerAttribute, SupabaseFeature, SupabaseLayer
 from .supabase_postgrest import Postgrest
 from .supabase_session import SupabaseSession
 from .vendor.realtime import AsyncRealtimeClient
@@ -48,16 +47,11 @@ class Adapter:
 
     def fetch_layers(self) -> None:
         self._all_layers = {
-            id_: Layer(
-                name,
-                id_,
-                geometry_type,
-                srid,
-                attributes=[LayerAttribute.from_json(a) for a in attributes],
-                supabase_parent_layer_id=parent_id,
-                commit_callback=self._commit_callback,
+            supabase_layer.id: Layer.from_supabase_layer(
+                supabase_layer,
+                self._commit_callback,
             )
-            for name, id_, geometry_type, srid, attributes, parent_id in self._postgrest_client.get_layers()
+            for supabase_layer in self._postgrest_client.get_layers()
         }
 
     def _commit_callback(
@@ -117,10 +111,28 @@ class Adapter:
 
     def all_layer_properties(self):
         """For display in the layer tree."""
-        return [
-            (layer.name, layer.geometry_type, layer.supabase_srid)
-            for layer in self._all_layers.values()
+        layers_data = {}
+        # first pass to get all layers
+        for layer_id, layer in self._all_layers.items():
+            layers_data[layer_id] = (
+                layer.name,
+                layer.geometry_type,
+                layer.supabase_srid,
+                [],
+            )
+        # second pass to get parent-child relationships
+        for layer_id, layer in self._all_layers.items():
+            parent_id = layer.supabase_parent_layer_id
+            if parent_id is None:
+                continue
+            layers_data[parent_id][3].append(layers_data[layer_id])
+        # third pass to get top-level layers
+        top_layers = [
+            layer_data
+            for layer_id, layer_data in layers_data.items()
+            if self._all_layers[layer_id].supabase_parent_layer_id is None
         ]
+        return top_layers
 
     def get_layer(self, id_or_name_or_qgis_id: str | None) -> Layer | None:
         if id_or_name_or_qgis_id is None:
@@ -137,8 +149,13 @@ class Adapter:
             return self._all_layers[self._qgis_id_to_supabase_id[id_or_name_or_qgis_id]]
         return None
 
-    def import_layer(self, layer: QgsVectorLayer) -> None:
-        supabase_layer_id = str(uuid.uuid4())
+    def _supabase_layer_from_qgis_features(
+        self,
+        layer: QgsVectorLayer,
+        features: list[QgsFeature],
+        *,
+        layer_name: str | None = None,
+    ) -> tuple[SupabaseLayer, list[SupabaseFeature]]:
         srid = layer.crs().authid()
         try:
             srid = int(srid.split(":")[-1])
@@ -167,11 +184,9 @@ class Adapter:
         # request = QgsFeatureRequest().setDestinationCrs(target_crs, context)
         # features = list(layer.getFeatures(request))
 
-        features = list(layer.getFeatures())
-        features = [f for f in features if not f.geometry().isNull()]
-
+        supabase_layer_id = str(uuid.uuid4())
         postgrest_layer = qgis_layer_to_postgrest_layer(
-            layer, supabase_layer_id, srid=srid
+            layer, supabase_layer_id, srid=srid, layer_name=layer_name
         )
 
         supabase_features = []
@@ -185,12 +200,26 @@ class Adapter:
             )
             supabase_features.append(supabase_feature)
 
+        return postgrest_layer, supabase_features
+
+    def import_layer(self, layer: QgsVectorLayer) -> None:
+        features = [f for f in layer.getFeatures() if not f.geometry().isNull()]
+
+        postgrest_layer, supabase_features = self._supabase_layer_from_qgis_features(
+            layer, features
+        )
+
         self._postgrest_client.create_layer(postgrest_layer)
         self._postgrest_client.add_features(supabase_features)
+        self._all_layers[postgrest_layer.id] = Layer.from_supabase_layer(
+            postgrest_layer,
+            self._commit_callback,
+        )
 
         iface.messageBar().pushMessage(
             "Jakarto layers",
-            f"Imported {len(features)} features to '{postgrest_layer.name}' layer",
+            f"Imported {len(supabase_features)} features "
+            f"to '{postgrest_layer.name}' layer",
             level=Qgis.MessageLevel.Success,
             duration=5,
         )
@@ -321,3 +350,36 @@ class Adapter:
     def close(self) -> None:
         self.stop_realtime()
         self._session.close()
+
+    def create_sub_layer(self, parent_layer: Layer, new_layer_name: str) -> None:
+        """Create a new sub-layer from selected features of the parent layer.
+
+        Args:
+            parent_layer: The parent layer
+            new_layer_name: Name for the new sub-layer
+        """
+        selected_features = parent_layer.qgis_layer.selectedFeatures()
+        if not selected_features:
+            return
+
+        postgrest_layer, supabase_features = self._supabase_layer_from_qgis_features(
+            parent_layer.qgis_layer, selected_features, layer_name=new_layer_name
+        )
+        postgrest_layer.parent_id = parent_layer.supabase_layer_id
+
+        self._postgrest_client.create_layer(postgrest_layer)
+        self._postgrest_client.add_features(supabase_features)
+
+        new_layer = Layer.from_supabase_layer(
+            postgrest_layer,
+            self._commit_callback,
+        )
+        self._all_layers[postgrest_layer.id] = new_layer
+
+        iface.messageBar().pushMessage(
+            "Jakarto layers",
+            f"Created sub-layer '{postgrest_layer.name}' "
+            f"from {len(selected_features)} features",
+            level=Qgis.MessageLevel.Success,
+            duration=5,
+        )

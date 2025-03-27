@@ -70,7 +70,7 @@ class SupabaseLayer:
     geometry_type: str
     attributes: list[LayerAttribute]
     srid: int
-    parent_id: str | None
+    parent_id: str | None = None
 
     def to_json(self) -> dict[str, Any]:
         return asdict(self)

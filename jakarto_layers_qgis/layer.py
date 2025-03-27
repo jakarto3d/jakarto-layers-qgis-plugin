@@ -10,7 +10,7 @@ from .constants import geometry_types, python_to_qmetatype, qmetatype_to_python
 from .converters import supabase_to_qgis_feature
 from .logs import log
 from .qgis_events import QGISDeleteEvent, QGISInsertEvent, QGISUpdateEvent
-from .supabase_models import LayerAttribute, SupabaseFeature
+from .supabase_models import LayerAttribute, SupabaseFeature, SupabaseLayer
 
 iface: QgisInterface
 
@@ -46,6 +46,20 @@ class Layer:
         self._layer_attributes_modified: bool = False
 
         self._qgis_layer = None
+
+    @classmethod
+    def from_supabase_layer(
+        cls, supabase_layer: SupabaseLayer, commit_callback: Callable
+    ) -> Layer:
+        return cls(
+            name=supabase_layer.name,
+            supabase_layer_id=supabase_layer.id,
+            geometry_type=supabase_layer.geometry_type,
+            supabase_srid=supabase_layer.srid,
+            attributes=supabase_layer.attributes,
+            supabase_parent_layer_id=supabase_layer.parent_id,
+            commit_callback=commit_callback,
+        )
 
     @property
     def qgis_layer(self) -> QgsVectorLayer:

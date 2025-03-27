@@ -7,11 +7,12 @@ from qgis.core import Qgis, QgsProject
 from qgis.gui import QgisInterface
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction, QMenu, QTreeWidgetItem, QWidget
+from qgis.PyQt.QtWidgets import QAction, QMenu, QTreeWidgetItem, QWidget, QMessageBox
 from qgis.utils import iface
 
 from .adapter import Adapter
 from .ui.main_panel import MainPanel
+from .create_sub_layer_ui import CreateSubLayerDialog
 
 iface: QgisInterface
 
@@ -139,12 +140,16 @@ class Plugin:
             return
 
         menu = QMenu()
-        add_action = menu.addAction("Add Layer")
-        add_action.setToolTip("Add layer to the map")
+        add_action = menu.addAction("Load Layer")
+        add_action.setToolTip("Load layer on the current map")
         add_action.setEnabled(self.panel.layerAdd.isEnabled())
         remove_action = menu.addAction("Remove Layer")
         remove_action.setToolTip("Remove layer from the map")
         remove_action.setEnabled(self.panel.layerRemove.isEnabled())
+        menu.addSeparator()
+        sub_layer_action = menu.addAction("New Sub Layer from selection")
+        sub_layer_action.setToolTip("Create a new sub layer from the selection")
+        sub_layer_action.setEnabled(self.panel.layerRemove.isEnabled())
         menu.addSeparator()
         drop_action = menu.addAction("Drop Layer")
         drop_action.setToolTip("Drop layer from the database (cannot be undone)")
@@ -155,6 +160,8 @@ class Plugin:
             self.add_layer(item)
         elif action == remove_action:
             self.remove_layer()
+        elif action == sub_layer_action:
+            self.create_sub_layer(item)
         elif action == drop_action:
             self.drop_layer(item)
 
@@ -183,25 +190,39 @@ class Plugin:
         self.reload_layers()
         self.adapter.start_realtime()
 
-    def reload_layers(self) -> None:
-        self.adapter.fetch_layers()
+    def reload_layers(self, fetch_layers: bool = True) -> None:
+        if fetch_layers:
+            self.adapter.fetch_layers()
         self.panel.layerTree.clear()
-        for name, type_, srid in self.adapter.all_layer_properties():
+        for name, type_, srid, children in self.adapter.all_layer_properties():
             item = QTreeWidgetItem()
             item.setText(0, name)
-            font = item.font(0)
-            font.setBold(True)
-            item.setFont(0, font)
+            if children:
+                font = item.font(0)
+                font.setBold(True)
+                item.setFont(0, font)
             item.setText(1, type_)
             item.setText(2, str(srid))
+            for child in children:
+                child_item = QTreeWidgetItem()
+                child_item.setText(0, child[0])
+                child_item.setText(1, child[1])
+                child_item.setText(2, str(child[2]))
+                item.addChild(child_item)
+
             self.panel.layerTree.addTopLevelItem(item)
         self.panel.layerTree.resizeColumnToContents(0)
         self.panel.layerTree.resizeColumnToContents(1)
         self.panel.layerTree.resizeColumnToContents(2)
 
+        self.panel.layerTree.expandAll()
+
     def get_selected_layer(self, value=None) -> str | None:
         if value is not None and hasattr(value, "text"):
-            return value.text()
+            try:
+                return value.text()
+            except TypeError:
+                return value.text(0)
         current = self.panel.layerTree.currentItem()
         return current.text(0) if current else None
 
@@ -238,11 +259,39 @@ class Plugin:
             self.on_item_selection_changed()
             iface.mapCanvas().refresh()
 
+    def create_sub_layer(self, value) -> None:
+        layer_name = self.get_selected_layer(value)
+        if layer_name is None:
+            return
+        layer = self.adapter.get_layer(layer_name)
+        if layer is None or layer.qgis_layer is None:
+            return
+
+        # Check for selected features before showing dialog
+        selected_count = layer.qgis_layer.selectedFeatureCount()
+        if selected_count == 0:
+            QMessageBox.warning(
+                iface.mainWindow(),
+                "No Features Selected",
+                "Please select features from the loaded "
+                "layer before creating a sub-layer.",
+            )
+            return
+
+        dialog = CreateSubLayerDialog(parent=iface.mainWindow(), layer=layer)
+
+        accepted = CreateSubLayerDialog.DialogCode.Accepted
+        if dialog.exec_() == accepted and dialog.properties:
+            self.adapter.create_sub_layer(layer, dialog.properties.name)
+            self.reload_layers(fetch_layers=False)
+            self.on_item_selection_changed()
+            iface.mapCanvas().refresh()
+
     def drop_layer(self, value) -> None:
         layer_name = self.get_selected_layer(value)
         self.adapter.remove_layer(layer_name)
         self.adapter.drop_layer(layer_name)
-        self.reload_layers()
+        self.reload_layers(fetch_layers=False)
         self.on_item_selection_changed()
         iface.mapCanvas().refresh()
 
@@ -266,4 +315,4 @@ class Plugin:
             )
             return
 
-        self.reload_layers()
+        self.reload_layers(fetch_layers=False)

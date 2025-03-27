@@ -1,17 +1,17 @@
 from __future__ import annotations
 
+from queue import Queue
 from typing import Any, Callable, overload
 
-from queue import Queue
 import requests
-from qgis.core import QgsApplication, QgsMessageLog, QgsTask
+from qgis.core import QgsApplication, QgsTask
 
 from .constants import (
     anon_key,
     geometry_types,
     postgrest_url,
 )
-from .supabase_models import SupabaseFeature, SupabaseLayer
+from .supabase_models import LayerAttribute, SupabaseFeature, SupabaseLayer
 from .supabase_session import SupabaseSession
 
 DEFAULT_TIMEOUT = 5
@@ -22,21 +22,23 @@ class Postgrest:
         self._session = session
         self._tasks = Queue(maxsize=100)
 
-    def get_layers(self) -> list[tuple]:
+    def get_layers(self) -> list[SupabaseLayer]:
         response = self._request("GET", table_name="layers")
         response.raise_for_status()  # type: ignore
         layers = [
-            (
-                layer["name"],
-                layer["id"],
-                layer["geometry_type"],
-                layer["srid"],
-                layer["attributes"] or [],
-                layer["parent_id"],
+            SupabaseLayer(
+                name=layer["name"],
+                id=layer["id"],
+                geometry_type=layer["geometry_type"],
+                srid=layer["srid"],
+                attributes=[
+                    LayerAttribute.from_json(a) for a in (layer["attributes"] or [])
+                ],
+                parent_id=layer["parent_id"],
             )
             for layer in response.json()
         ]
-        return sorted(layers, key=lambda x: x[0])
+        return sorted(layers, key=lambda x: x.name)
 
     def get_features(
         self,
