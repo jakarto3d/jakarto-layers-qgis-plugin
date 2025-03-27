@@ -30,6 +30,7 @@ class Postgrest:
                 layer["name"],
                 layer["id"],
                 layer["geometry_type"],
+                layer["srid"],
                 layer["attributes"] or [],
             )
             for layer in response.json()
@@ -58,12 +59,11 @@ class Postgrest:
         )
 
     def add_feature(self, feature: SupabaseFeature) -> None:
-        response = self._request(
+        self._request(
             "POST",
             geometry_type=feature.geometry_type,
             json=feature.to_json(),
         )
-        response.raise_for_status()
 
     def add_features(self, features: list[SupabaseFeature]) -> None:
         geom_type = set(feature.geometry_type for feature in features)
@@ -72,57 +72,51 @@ class Postgrest:
         if (geom := geom_type.pop()) != "point":
             raise ValueError("Only point geometry type is supported")
 
-        response = self._request(
+        self._request(
             "POST",
             geometry_type=geom,
             json=[f.to_json() for f in features],
             timeout=30,
         )
-        response.raise_for_status()
 
     def remove_feature(self, supabase_feature_id: str) -> None:
-        response = self._request(
+        self._request(
             "DELETE",
             geometry_type="point",  # to select the table
             params={"id": f"eq.{supabase_feature_id}"},
         )
-        response.raise_for_status()
 
     def update_feature(self, feature: SupabaseFeature) -> None:
         if not feature.id:
             raise ValueError("Feature has no source ID")
-        response = self._request(
+        self._request(
             "PATCH",
             geometry_type=feature.geometry_type,
             json=feature.to_json(),
             params={"id": f"eq.{feature.id}"},
         )
-        response.raise_for_status()
 
     def update_attributes(self, layer_id: str, attributes: list[dict]) -> None:
-        response = self._request(
+        self._request(
             "PATCH",
             table_name="layers",
             params={"id": f"eq.{layer_id}"},
             json={"attributes": attributes},
         )
-        response.raise_for_status()
 
     def create_layer(self, layer: SupabaseLayer) -> None:
-        response = self._request(
+        self._request(
             "POST",
             table_name="layers",
             json=layer.to_json(),
         )
-        response.raise_for_status()
 
     def drop_layer(self, layer_id: str) -> None:
-        response = self._request(
+        self._request(
             "DELETE",
             table_name="layers",
             params={"id": f"eq.{layer_id}"},
         )
-        response.raise_for_status()
 
     @overload
     def _request(
@@ -178,11 +172,14 @@ class Postgrest:
             "timeout": timeout,
         }
         if callback is None:
-            return self._session.request(**args)
+            response = self._session.request(**args)
+            _raise_for_status(response)
+            return response
 
         task = _WebRequestTask(
             description=f"Fetching features from {table_name}",
             args=args,
+            raise_for_status=_raise_for_status,
             callback=callback,
         )
         self._queue_task(task)
@@ -198,20 +195,40 @@ class _WebRequestTask(QgsTask):
         self,
         description: str,
         args: dict[str, Any],
+        raise_for_status: Callable[[requests.Response], None],
         callback: Callable,
     ):
         super().__init__(description, QgsTask.Flag.CanCancel)
         self.args = args
         self.response = None
+        self.raise_for_status = raise_for_status
         self.callback = callback
         self._result = None
 
     def run(self):
         response = requests.request(**self.args)
-        response.raise_for_status()
+        self.raise_for_status(response)
         self._result = response.json()
         return True
 
     def finished(self, result: bool):
         if result and self._result:
             self.callback(self._result)
+
+
+def _raise_for_status(response: requests.Response) -> None:
+    """
+    Raise an HTTPError if the response is not OK.
+    If the response is JSON, extract the error message.
+    """
+    try:
+        response.raise_for_status()
+    except requests.HTTPError as e:
+        error = e.response.text
+        content_type = e.response.headers.get("content-type", "")
+        if content_type.startswith("application/json"):
+            try:
+                error = e.response.json()["message"]
+            except Exception:
+                pass
+        raise requests.HTTPError(f"({e.response.status_code}) {error}")

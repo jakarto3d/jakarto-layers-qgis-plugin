@@ -21,12 +21,14 @@ class Layer:
         name: str,
         supabase_layer_id: str,
         geometry_type: str,
+        supabase_srid: int,
         attributes: list[LayerAttribute] | None,
         commit_callback: Callable,
     ) -> None:
         self.name = name
         self.supabase_layer_id = supabase_layer_id
         self.geometry_type = geometry_type
+        self.supabase_srid = supabase_srid
         self.attributes: list[LayerAttribute] = attributes or []
         self.commit_callback = commit_callback
 
@@ -48,7 +50,7 @@ class Layer:
         if self._qgis_layer is None:
             # create the layer
             self._qgis_layer = QgsVectorLayer(
-                f"{geometry_types[self.geometry_type]}?crs=EPSG:4326&index=yes",
+                f"{geometry_types[self.geometry_type]}?crs=EPSG:{self.supabase_srid}&index=yes",
                 self.name,
                 "memory",
             )

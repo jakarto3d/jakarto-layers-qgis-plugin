@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from itertools import chain
 import threading
 import traceback
 import uuid
@@ -51,10 +52,11 @@ class Adapter:
                 name,
                 id_,
                 geometry_type,
+                srid,
                 attributes=[LayerAttribute.from_json(a) for a in attributes],
                 commit_callback=self._commit_callback,
             )
-            for name, id_, geometry_type, attributes in self._postgrest_client.get_layers()
+            for name, id_, geometry_type, srid, attributes in self._postgrest_client.get_layers()
         }
 
     def _commit_callback(
@@ -129,15 +131,40 @@ class Adapter:
 
     def import_layer(self, layer: QgsVectorLayer) -> None:
         supabase_layer_id = str(uuid.uuid4())
+        srid = layer.crs().authid()
+        try:
+            srid = int(srid.split(":")[-1])
+        except Exception:
+            raise ValueError(f"Unsupported CRS: {srid}")
 
-        target_crs = QgsCoordinateReferenceSystem("EPSG:4326")
-        context = QgsProject.instance().transformContext()
+        # must correspond with supported crs in jakproj
+        allowed_srids = list(
+            chain(
+                range(2945, 2953),  # NAD83(CSRS) / MTM
+                [26891],  # NAD83 / MTM
+                range(32183, 32192),  # NAD83 / MTM
+                [4326],  # WGS84
+                range(6346, 6348),  # NAD83(2011) / UTM
+                range(26910, 26920),  # NAD83 / UTM
+                range(32610, 32620),  # WGS 84 / UTM
+                [2154],  # RGF93 v1 / Lambert-93 -- France
+            )
+        )
+        if srid not in allowed_srids:
+            raise ValueError(f"Unsupported CRS: {srid}")
 
-        request = QgsFeatureRequest().setDestinationCrs(target_crs, context)
-        features = list(layer.getFeatures(request))
+        # reproject to a known CRS ?
+        # target_crs = QgsCoordinateReferenceSystem("EPSG:4326")
+        # context = QgsProject.instance().transformContext()
+        # request = QgsFeatureRequest().setDestinationCrs(target_crs, context)
+        # features = list(layer.getFeatures(request))
+
+        features = list(layer.getFeatures())
         features = [f for f in features if not f.geometry().isNull()]
 
-        postgrest_layer = qgis_layer_to_postgrest_layer(layer, supabase_layer_id)
+        postgrest_layer = qgis_layer_to_postgrest_layer(
+            layer, supabase_layer_id, srid=srid
+        )
 
         supabase_features = []
         feature_type = layer.geometryType().name  # type: ignore
@@ -153,12 +180,11 @@ class Adapter:
         self._postgrest_client.create_layer(postgrest_layer)
         self._postgrest_client.add_features(supabase_features)
 
-        # Show a toast notification to the user
         iface.messageBar().pushMessage(
             "Jakarto layers",
             f"Imported {len(features)} features to '{postgrest_layer.name}' layer",
-            level=Qgis.MessageLevel.Info,
-            duration=5,  # Show for 5 seconds
+            level=Qgis.MessageLevel.Success,
+            duration=5,
         )
 
     def add_layer(

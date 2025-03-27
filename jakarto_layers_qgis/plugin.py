@@ -244,5 +244,15 @@ class Plugin:
         if layer.geometryType() != Qgis.GeometryType.Point:
             return
 
-        self.adapter.import_layer(layer)
+        try:
+            self.adapter.import_layer(layer)
+        except ValueError as e:
+            iface.messageBar().pushMessage(
+                "Jakarto layers",
+                str(e),
+                level=Qgis.MessageLevel.Critical,
+                duration=5,
+            )
+            return
+
         self.reload_layers()
