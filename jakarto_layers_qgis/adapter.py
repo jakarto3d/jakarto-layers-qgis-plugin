@@ -71,7 +71,11 @@ class Adapter:
             if isinstance(event, QGISInsertEvent):
                 log(f"QGISInsertEvent: {len(event.features)} features")
                 for feature in event.features:
-                    supabase_feature = qgis_to_supabase_feature(feature, layer_id)
+                    supabase_feature = qgis_to_supabase_feature(
+                        feature,
+                        supabase_layer_id=layer_id,
+                        attribute_names=[a.name() for a in layer.qgis_layer.fields()],
+                    )
                     self._postgrest_client.add_feature(supabase_feature)
                     layer.add_feature_id(feature.id(), supabase_feature.id)
             elif isinstance(event, QGISUpdateEvent):
@@ -81,7 +85,10 @@ class Adapter:
                         continue
                     supabase_id = layer.get_supabase_feature_id(feature.id())
                     supabase_feature = qgis_to_supabase_feature(
-                        feature, layer_id, supabase_id
+                        feature,
+                        supabase_layer_id=layer_id,
+                        supabase_feature_id=supabase_id,
+                        attribute_names=[a.name() for a in layer.qgis_layer.fields()],
                     )
                     self._postgrest_client.update_feature(supabase_feature)
                     layer.manually_updated_supabase_ids.add(supabase_feature.id)
@@ -202,12 +209,13 @@ class Adapter:
 
         supabase_features = []
         feature_type = layer.geometryType().name  # type: ignore
+        attribute_names = [a.name() for a in layer.fields()]
         for feature in features:
             supabase_feature = qgis_to_supabase_feature(
                 feature,
-                supabase_layer_id,
+                supabase_layer_id=supabase_layer_id,
                 feature_type=feature_type,
-                attribute_names=[a.name for a in postgrest_layer.attributes],
+                attribute_names=attribute_names,
             )
             if parent_layer is not None:
                 # set the parent id for the supabase feature (for sub-layers)

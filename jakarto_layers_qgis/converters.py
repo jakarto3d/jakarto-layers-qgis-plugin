@@ -23,18 +23,16 @@ if TYPE_CHECKING:
 
 def qgis_to_supabase_feature(
     feature: QgsFeature,
+    *,
     supabase_layer_id: str,
     supabase_feature_id: str | None = None,
-    *,
     feature_type: str | None = None,
-    attribute_names: list[str] | None = None,
+    attribute_names: list[str],
 ) -> SupabaseFeature:
-    if attribute_names is None:
-        attribute_names = list(feature.attributeMap().keys())
+    attributes = {n: v for n, v in zip(attribute_names, feature.attributes())}
 
-    attributes = {}
     null = QVariant()
-    for name, value in zip(attribute_names, feature.attributes()):
+    for name, value in attributes.items():
         if isinstance(value, (int, str, float, bool)):
             pass
         elif null == value:
