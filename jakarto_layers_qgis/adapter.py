@@ -238,7 +238,8 @@ class Adapter:
         )
 
         self._postgrest_client.create_layer(postgrest_layer)
-        self._postgrest_client.add_features(supabase_features)
+        if supabase_features:
+            self._postgrest_client.add_features(supabase_features)
         self._all_layers[postgrest_layer.id] = Layer.from_supabase_layer(
             postgrest_layer,
             self._commit_callback,
@@ -291,6 +292,7 @@ class Adapter:
             return False
         if layer.supabase_layer_id not in self._all_layers:
             return False
+        self.remove_layer(layer.supabase_layer_id)
         self._postgrest_client.drop_layer(layer.supabase_layer_id)
         self._all_layers.pop(layer.supabase_layer_id, None)
         return True
@@ -378,6 +380,15 @@ class Adapter:
     def close(self) -> None:
         self.stop_realtime()
         self._session.close()
+
+    def merge_sub_layer(self, id_or_name: str | None) -> None:
+        if not (layer := self.get_layer(id_or_name)):
+            return
+        if layer.supabase_parent_layer_id is None:
+            return
+        self.remove_layer(layer.supabase_layer_id)
+        self._postgrest_client.merge_sub_layer(layer.supabase_layer_id)
+        self._all_layers.pop(layer.supabase_layer_id, None)
 
     def create_sub_layer(self, parent_layer: Layer, new_layer_name: str) -> None:
         """Create a new sub-layer from selected features of the parent layer.

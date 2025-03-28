@@ -139,6 +139,11 @@ class Plugin:
         if item is None:
             return
 
+        layer = self.adapter.get_layer(self.get_selected_layer(item.text(0)))
+        if not layer:
+            return
+        is_sub_layer = layer.supabase_parent_layer_id is not None
+
         menu = QMenu()
         add_action = menu.addAction("Load Layer")
         add_action.setToolTip("Load layer on the current map")
@@ -147,9 +152,15 @@ class Plugin:
         remove_action.setToolTip("Remove layer from the map")
         remove_action.setEnabled(self.panel.layerRemove.isEnabled())
         menu.addSeparator()
+        merge_sub_layer_action = menu.addAction("Merge Sub Layer")
+        merge_sub_layer_action.setToolTip(
+            "Merge the selected sub layer into its parent layer"
+        )
+        merge_sub_layer_action.setVisible(is_sub_layer)
         sub_layer_action = menu.addAction("New Sub Layer from selection")
         sub_layer_action.setToolTip("Create a new sub layer from the selection")
         sub_layer_action.setEnabled(self.panel.layerRemove.isEnabled())
+        sub_layer_action.setVisible(not is_sub_layer)
         menu.addSeparator()
         drop_action = menu.addAction("Drop Layer")
         drop_action.setToolTip("Drop layer from the database (cannot be undone)")
@@ -160,6 +171,8 @@ class Plugin:
             self.add_layer(item)
         elif action == remove_action:
             self.remove_layer()
+        elif action == merge_sub_layer_action:
+            self.merge_sub_layer(item)
         elif action == sub_layer_action:
             self.create_sub_layer(item)
         elif action == drop_action:
@@ -295,6 +308,16 @@ class Plugin:
             self.reload_layers(fetch_layers=False)
             self.on_item_selection_changed()
             iface.mapCanvas().refresh()
+
+    def merge_sub_layer(self, value) -> None:
+        layer_name = self.get_selected_layer(value)
+        if layer_name is None:
+            return
+        self.adapter.merge_sub_layer(layer_name)
+        self.adapter.remove_layer(layer_name)
+        self.reload_layers(fetch_layers=False)
+        self.on_item_selection_changed()
+        iface.mapCanvas().refresh()
 
     def drop_layer(self, value) -> None:
         layer_name = self.get_selected_layer(value)

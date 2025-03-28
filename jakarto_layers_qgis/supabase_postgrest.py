@@ -121,12 +121,20 @@ class Postgrest:
             params={"id": f"eq.{layer_id}"},
         )
 
+    def merge_sub_layer(self, layer_id: str) -> None:
+        self._request(
+            "POST",
+            rpc="merge_sub_layer",
+            json={"sub_layer_id": layer_id},
+        )
+
     @overload
     def _request(
         self,
         method: str,
         *,
         callback: None = None,
+        rpc: str | None = None,
         table_name: str | None = None,
         geometry_type: str | None = None,
         json=None,
@@ -140,6 +148,7 @@ class Postgrest:
         method: str,
         *,
         callback: Callable,
+        rpc: str | None = None,
         table_name: str | None = None,
         geometry_type: str | None = None,
         json=None,
@@ -152,20 +161,25 @@ class Postgrest:
         method: str,
         *,
         callback: Callable | None = None,
+        rpc: str | None = None,
         table_name: str | None = None,
         geometry_type: str | None = None,
         json=None,
         params: dict[str, Any] | None = None,
         timeout: int = DEFAULT_TIMEOUT,
     ) -> requests.Response | None:
-        if table_name is None and geometry_type is None:
+        if table_name is None and geometry_type is None and not rpc:
             raise ValueError("Either table_name or geometry_type must be provided")
         if table_name is None:
             table_name = f"{geometry_type}s"
 
+        if not rpc:
+            url = f"{postgrest_url}/{table_name}"
+        else:
+            url = f"{postgrest_url}/rpc/{rpc}"
         args = {
             "method": method,
-            "url": f"{postgrest_url}/{table_name}",
+            "url": url,
             "params": params,
             "json": json,
             "headers": {
