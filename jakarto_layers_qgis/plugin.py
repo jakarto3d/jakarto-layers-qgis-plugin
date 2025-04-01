@@ -7,12 +7,19 @@ from qgis.core import Qgis, QgsProject
 from qgis.gui import QgisInterface
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction, QMenu, QTreeWidgetItem, QWidget, QMessageBox
+from qgis.PyQt.QtWidgets import (
+    QAction,
+    QInputDialog,
+    QMenu,
+    QMessageBox,
+    QTreeWidgetItem,
+    QWidget,
+)
 from qgis.utils import iface
 
 from .adapter import Adapter
-from .ui.main_panel import MainPanel
 from .create_sub_layer_ui import CreateSubLayerDialog
+from .ui.main_panel import MainPanel
 
 iface: QgisInterface
 
@@ -162,6 +169,9 @@ class Plugin:
         sub_layer_action.setEnabled(self.panel.layerRemove.isEnabled())
         sub_layer_action.setVisible(not is_sub_layer)
         menu.addSeparator()
+        rename_action = menu.addAction("Rename Layer")
+        rename_action.setToolTip("Rename the selected layer")
+        menu.addSeparator()
         drop_action = menu.addAction("Drop Layer")
         drop_action.setToolTip("Drop layer from the database (cannot be undone)")
 
@@ -175,6 +185,8 @@ class Plugin:
             self.merge_sub_layer(item)
         elif action == sub_layer_action:
             self.create_sub_layer(item)
+        elif action == rename_action:
+            self.rename_layer(item)
         elif action == drop_action:
             self.drop_layer(item)
 
@@ -362,3 +374,23 @@ class Plugin:
             return
 
         self.reload_layers(fetch_layers=False)
+
+    def rename_layer(self, value) -> None:
+        supabase_id = self.get_selected_layer(value)
+        if supabase_id is None:
+            return
+        layer = self.adapter.get_layer(supabase_id)
+        if layer is None:
+            return
+
+        new_name, ok = QInputDialog.getText(
+            iface.mainWindow(),
+            f"Rename Layer '{layer.name}'",
+            "Enter new layer name:",
+            text=layer.name,
+        )
+        if ok and new_name and new_name != layer.name:
+            self.adapter.rename_layer(supabase_id, new_name)
+            self.reload_layers(fetch_layers=False)
+            self.on_item_selection_changed()
+            iface.mapCanvas().refresh()

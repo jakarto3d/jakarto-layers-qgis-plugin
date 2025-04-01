@@ -128,6 +128,14 @@ class Postgrest:
             json={"sub_layer_id": layer_id},
         )
 
+    def rename_layer(self, layer_id: str, new_name: str) -> None:
+        self._request(
+            "PATCH",
+            table_name="layers",
+            params={"id": f"eq.{layer_id}"},
+            json={"name": new_name},
+        )
+
     @overload
     def _request(
         self,

@@ -414,3 +414,17 @@ class Adapter:
             level=Qgis.MessageLevel.Success,
             duration=5,
         )
+
+    def rename_layer(self, supabase_id: str | None, new_name: str) -> None:
+        """Rename a layer.
+
+        Args:
+            supabase_id: The ID of the layer to rename
+            new_name: The new name for the layer
+        """
+        if not (layer := self.get_layer(supabase_id)):
+            return
+        self._postgrest_client.rename_layer(layer.supabase_layer_id, new_name)
+        layer.name = new_name
+        if layer.qgis_layer is not None:
+            layer.qgis_layer.setName(new_name)
