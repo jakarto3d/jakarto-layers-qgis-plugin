@@ -139,7 +139,7 @@ class Plugin:
         if item is None:
             return
 
-        layer = self.adapter.get_layer(self.get_selected_layer(item.text(0)))
+        layer = self.adapter.get_layer(self.get_selected_layer(item))
         if not layer:
             return
         is_sub_layer = layer.supabase_parent_layer_id is not None
@@ -207,7 +207,13 @@ class Plugin:
         if fetch_layers:
             self.adapter.fetch_layers()
         self.panel.layerTree.clear()
-        for name, type_, srid, children in self.adapter.all_layer_properties():
+        for (
+            name,
+            type_,
+            srid,
+            supabase_layer_id,
+            children,
+        ) in self.adapter.all_layer_properties():
             item = QTreeWidgetItem()
             item.setText(0, name)
             if children:
@@ -216,11 +222,15 @@ class Plugin:
                 item.setFont(0, font)
             item.setText(1, type_)
             item.setText(2, str(srid))
-            for child in children:
+            # Store the layer ID in the item's data
+            item.setData(0, Qt.ItemDataRole.UserRole, supabase_layer_id)
+            for child_name, child_type, child_srid, child_id, _ in children:
                 child_item = QTreeWidgetItem()
-                child_item.setText(0, child[0])
-                child_item.setText(1, child[1])
-                child_item.setText(2, str(child[2]))
+                child_item.setText(0, child_name)
+                child_item.setText(1, child_type)
+                child_item.setText(2, str(child_srid))
+                # Store the child layer ID in the item's data
+                child_item.setData(0, Qt.ItemDataRole.UserRole, child_id)
                 item.addChild(child_item)
 
             self.panel.layerTree.addTopLevelItem(item)
@@ -231,18 +241,18 @@ class Plugin:
         self.panel.layerTree.expandAll()
 
     def get_selected_layer(self, value=None) -> str | None:
-        if value is not None and hasattr(value, "text"):
+        if value is not None and hasattr(value, "data"):
             try:
-                return value.text()
+                return value.data(0, Qt.ItemDataRole.UserRole)
             except TypeError:
-                return value.text(0)
+                return value.data(0, Qt.ItemDataRole.UserRole)
         current = self.panel.layerTree.currentItem()
-        return current.text(0) if current else None
+        return current.data(0, Qt.ItemDataRole.UserRole) if current else None
 
     def on_item_selection_changed(self) -> None:
         add_enabled, remove_enabled = True, True
-        if layer_name := self.get_selected_layer():
-            loaded = self.adapter.is_loaded(layer_name)
+        if supabase_id := self.get_selected_layer():
+            loaded = self.adapter.is_loaded(supabase_id)
             add_enabled = not loaded
             remove_enabled = loaded
 
@@ -255,17 +265,19 @@ class Plugin:
             iface.mapCanvas().refresh()
 
     def add_layer(self, value) -> None:
-        layer_name = self.get_selected_layer(value)
+        supabase_id = self.get_selected_layer(value)
+        if supabase_id is None:
+            return
 
         def _sub_callback(success: bool) -> None:
             if success:
                 self.on_item_selection_changed()
                 iface.mapCanvas().refresh()
-            layer = self.adapter.get_layer(layer_name)
+            layer = self.adapter.get_layer(supabase_id)
             if layer is not None:
                 iface.setActiveLayer(layer.qgis_layer)
 
-        self.adapter.add_layer(layer_name, _sub_callback)
+        self.adapter.add_layer(supabase_id, _sub_callback)
 
     def remove_layer(self) -> None:
         if self.adapter.remove_layer(self.get_selected_layer()):
@@ -273,10 +285,10 @@ class Plugin:
             iface.mapCanvas().refresh()
 
     def create_sub_layer(self, value) -> None:
-        layer_name = self.get_selected_layer(value)
-        if layer_name is None:
+        supabase_id = self.get_selected_layer(value)
+        if supabase_id is None:
             return
-        layer = self.adapter.get_layer(layer_name)
+        layer = self.adapter.get_layer(supabase_id)
         if layer is None or layer.qgis_layer is None:
             return
 
@@ -310,19 +322,21 @@ class Plugin:
             iface.mapCanvas().refresh()
 
     def merge_sub_layer(self, value) -> None:
-        layer_name = self.get_selected_layer(value)
-        if layer_name is None:
+        supabase_id = self.get_selected_layer(value)
+        if supabase_id is None:
             return
-        self.adapter.merge_sub_layer(layer_name)
-        self.adapter.remove_layer(layer_name)
+        self.adapter.merge_sub_layer(supabase_id)
+        self.adapter.remove_layer(supabase_id)
         self.reload_layers(fetch_layers=False)
         self.on_item_selection_changed()
         iface.mapCanvas().refresh()
 
     def drop_layer(self, value) -> None:
-        layer_name = self.get_selected_layer(value)
-        self.adapter.remove_layer(layer_name)
-        self.adapter.drop_layer(layer_name)
+        supabase_id = self.get_selected_layer(value)
+        if supabase_id is None:
+            return
+        self.adapter.remove_layer(supabase_id)
+        self.adapter.drop_layer(supabase_id)
         self.reload_layers(fetch_layers=False)
         self.on_item_selection_changed()
         iface.mapCanvas().refresh()

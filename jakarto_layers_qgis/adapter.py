@@ -107,14 +107,11 @@ class Adapter:
                 [{"name": a.name, "type": a.type} for a in layer.attributes],
             )
 
-    def is_loaded(self, id_or_name: str) -> bool:
-        layer = self.get_layer(id_or_name)
+    def is_loaded(self, supabase_id: str) -> bool:
+        layer = self.get_layer(supabase_id)
         if layer is None:
             return False
         return layer.supabase_layer_id in self._loaded_layers
-
-    def all_layer_names(self) -> list[str]:
-        return [layer.name for layer in self._all_layers.values()]
 
     def all_layer_properties(self):
         """For display in the layer tree."""
@@ -125,6 +122,7 @@ class Adapter:
                 layer.name,
                 layer.geometry_type,
                 layer.supabase_srid,
+                layer_id,
                 [],
             )
         # second pass to get parent-child relationships
@@ -132,7 +130,7 @@ class Adapter:
             parent_id = layer.supabase_parent_layer_id
             if parent_id is None:
                 continue
-            layers_data[parent_id][3].append(layers_data[layer_id])
+            layers_data[parent_id][4].append(layers_data[layer_id])
         # third pass to get top-level layers
         top_layers = [
             layer_data
@@ -141,19 +139,11 @@ class Adapter:
         ]
         return top_layers
 
-    def get_layer(self, id_or_name_or_qgis_id: str | None) -> Layer | None:
-        if id_or_name_or_qgis_id is None:
+    def get_layer(self, supabase_id: str | None) -> Layer | None:
+        if supabase_id is None:
             return None
-        if id_or_name_or_qgis_id in self._all_layers:
-            return self._all_layers[id_or_name_or_qgis_id]
-        if id_or_name_or_qgis_id in self.all_layer_names():
-            return [
-                layer
-                for layer in self._all_layers.values()
-                if layer.name == id_or_name_or_qgis_id
-            ][0]
-        if id_or_name_or_qgis_id in self._qgis_id_to_supabase_id:
-            return self._all_layers[self._qgis_id_to_supabase_id[id_or_name_or_qgis_id]]
+        if supabase_id in self._all_layers:
+            return self._all_layers[supabase_id]
         return None
 
     def _supabase_layer_from_qgis_features(
@@ -254,9 +244,9 @@ class Adapter:
         )
 
     def add_layer(
-        self, id_or_name: str | None, callback: Callable[[bool], Any]
+        self, supabase_id: str | None, callback: Callable[[bool], Any]
     ) -> None:
-        if not (layer := self.get_layer(id_or_name)):
+        if not (layer := self.get_layer(supabase_id)):
             callback(False)
             return
         if layer.supabase_layer_id in self._loaded_layers:
@@ -278,8 +268,8 @@ class Adapter:
             callback=_sub_callback,
         )
 
-    def remove_layer(self, id_or_name: str | None) -> bool:
-        if not (layer := self.get_layer(id_or_name)):
+    def remove_layer(self, supabase_id: str | None) -> bool:
+        if not (layer := self.get_layer(supabase_id)):
             return False
         if layer.supabase_layer_id not in self._loaded_layers:
             return False
@@ -287,8 +277,8 @@ class Adapter:
         QgsProject.instance().removeMapLayer(layer.qgis_layer)
         return True
 
-    def drop_layer(self, id_or_name: str | None) -> bool:
-        if not (layer := self.get_layer(id_or_name)):
+    def drop_layer(self, supabase_id: str | None) -> bool:
+        if not (layer := self.get_layer(supabase_id)):
             return False
         if layer.supabase_layer_id not in self._all_layers:
             return False
@@ -381,8 +371,8 @@ class Adapter:
         self.stop_realtime()
         self._session.close()
 
-    def merge_sub_layer(self, id_or_name: str | None) -> None:
-        if not (layer := self.get_layer(id_or_name)):
+    def merge_sub_layer(self, supabase_id: str | None) -> None:
+        if not (layer := self.get_layer(supabase_id)):
             return
         if layer.supabase_parent_layer_id is None:
             return
