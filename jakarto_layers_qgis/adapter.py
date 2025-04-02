@@ -46,13 +46,24 @@ class Adapter:
         self._realtime_thread_event = threading.Event()
 
     def fetch_layers(self) -> None:
-        self._all_layers = {
+        all_layers = {
             supabase_layer.id: Layer.from_supabase_layer(
                 supabase_layer,
                 self._commit_callback,
             )
             for supabase_layer in self._postgrest_client.get_layers()
         }
+
+        # remove layers that are not in the loaded layers
+        for layer_id in list(self._all_layers.keys()):
+            if layer_id not in all_layers:
+                self._all_layers.pop(layer_id, None)
+
+        # add new layers
+        for layer_id, layer in all_layers.items():
+            if layer_id in self._all_layers:
+                continue
+            self._all_layers[layer_id] = layer
 
     def _commit_callback(
         self,
