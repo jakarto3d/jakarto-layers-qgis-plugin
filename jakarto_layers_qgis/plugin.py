@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Callable
 
 from qgis.core import Qgis, QgsProject
-from qgis.gui import QgisInterface
+from qgis.gui import QgisInterface, QgsLayerTreeViewIndicator
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import (
@@ -218,6 +218,7 @@ class Plugin:
     def reload_layers(self, fetch_layers: bool = True) -> None:
         if fetch_layers:
             self.adapter.fetch_layers()
+
         self.panel.layerTree.clear()
         for (
             name,
@@ -282,12 +283,30 @@ class Plugin:
             return
 
         def _sub_callback(success: bool) -> None:
-            if success:
-                self.on_item_selection_changed()
-                iface.mapCanvas().refresh()
+            if not success:
+                return
+            self.on_item_selection_changed()
+            iface.mapCanvas().refresh()
             layer = self.adapter.get_layer(supabase_id)
-            if layer is not None:
-                iface.setActiveLayer(layer.qgis_layer)
+            if layer is None:
+                return
+            iface.setActiveLayer(layer.qgis_layer)
+            tree_root = QgsProject.instance().layerTreeRoot()
+            layer_node = tree_root.findLayer(layer.qgis_layer.id())
+            if layer_node is not None:
+                icons_folder = HERE / "ui" / "icons"
+                icon = QIcon(str(icons_folder / "cloud-lightning-regular-36.png"))
+                ind = QgsLayerTreeViewIndicator(layer_node)
+                ind.setIcon(icon)
+                is_sub = layer.supabase_parent_layer_id is not None
+                name = "Layer" if not is_sub else "Sub-Layer"
+                ind.setToolTip(f"Jakarto Real-time {name}")
+
+                # remove all indicators, add the new one
+                tree_view = iface.layerTreeView()
+                for indicator in tree_view.indicators(layer_node):
+                    tree_view.removeIndicator(layer_node, indicator)
+                tree_view.addIndicator(layer_node, ind)
 
         self.adapter.add_layer(supabase_id, _sub_callback)
 
