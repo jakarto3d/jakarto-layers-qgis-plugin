@@ -1,6 +1,6 @@
-CREATE OR REPLACE FUNCTION track_sub_layer_deletes() 
-RETURNS TRIGGER AS $$ 
-BEGIN 
+CREATE OR REPLACE FUNCTION track_sub_layer_deletes()
+RETURNS TRIGGER AS $$
+BEGIN
     IF OLD.parent_id IS NOT NULL AND EXISTS (SELECT 1 FROM layers l WHERE l.id = OLD.layer_id) THEN
         INSERT INTO sub_layer_deletes (sub_layer_id, parent_feature_id)
         VALUES (OLD.layer_id, OLD.parent_id);

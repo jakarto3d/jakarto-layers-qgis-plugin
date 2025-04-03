@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, date
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
+from datetime import date, datetime
 from typing import Any
 
 from .constants import geometry_postgis_to_alias

@@ -1,6 +1,6 @@
 CREATE OR REPLACE FUNCTION merge_sub_layer(sub_layer_id uuid) RETURNS void AS $$
 DECLARE parent_layer_id uuid;
-BEGIN 
+BEGIN
     -- Get the parent layer id and verify it exists
     SELECT l.parent_id INTO parent_layer_id
     FROM layers l
@@ -12,7 +12,7 @@ BEGIN
 
     -- Update existing features to replace their parent features
     UPDATE points p
-    SET 
+    SET
         geom = sub.geom,
         attributes = sub.attributes
     FROM (

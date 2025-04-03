@@ -10,16 +10,20 @@ venv:
     . .venv/bin/activate
     pip install -r requirements.txt
     pip install -r requirements-dev.txt
+    .venv/bin/pre-commit install
 
     echo "Activate the venv with: "
     echo ". .venv/bin/activate"
 
+# Run the tests
 test:
     .venv/bin/pytest tests
 
+# Format the code
 format:
     .venv/bin/ruff format
     .venv/bin/ruff check --fix
+    .venv/bin/pre-commit run --all-files
 
 # Run QGIS with the plugin folder set to the current directory
 [linux]
