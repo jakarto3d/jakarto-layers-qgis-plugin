@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 from qgis.core import Qgis, QgsProject
 from qgis.gui import QgisInterface, QgsLayerTreeViewIndicator
@@ -253,12 +253,14 @@ class Plugin:
 
         self.panel.layerTree.expandAll()
 
-    def get_selected_layer(self, value=None) -> str | None:
+    def get_selected_layer(self, value: Any = None) -> str | None:
         if value is not None and hasattr(value, "data"):
             try:
                 return value.data(0, Qt.ItemDataRole.UserRole)
             except TypeError:
                 return value.data(0, Qt.ItemDataRole.UserRole)
+        elif value in self.adapter._all_layers:
+            return value
         current = self.panel.layerTree.currentItem()
         return current.data(0, Qt.ItemDataRole.UserRole) if current else None
 
@@ -275,7 +277,10 @@ class Plugin:
     def on_layers_removed(self, removed_ids: list[str]) -> None:
         if self.adapter.on_layers_removed(removed_ids):
             self.on_item_selection_changed()
-            iface.mapCanvas().refresh()
+            try:
+                iface.mapCanvas().refresh()
+            except RuntimeError:
+                pass  # object could be deleted here in tests
 
     def add_layer(self, value) -> None:
         supabase_id = self.get_selected_layer(value)
@@ -303,10 +308,11 @@ class Plugin:
                 ind.setToolTip(f"Jakarto Real-time {name}")
 
                 # remove all indicators, add the new one
-                tree_view = iface.layerTreeView()
-                for indicator in tree_view.indicators(layer_node):
-                    tree_view.removeIndicator(layer_node, indicator)
-                tree_view.addIndicator(layer_node, ind)
+                if hasattr(iface, "layerTreeView"):  # no iface.layerTreeView in tests
+                    tree_view = iface.layerTreeView()
+                    for indicator in tree_view.indicators(layer_node):
+                        tree_view.removeIndicator(layer_node, indicator)
+                    tree_view.addIndicator(layer_node, ind)
 
         self.adapter.add_layer(supabase_id, _sub_callback)
 
