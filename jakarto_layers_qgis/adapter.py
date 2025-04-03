@@ -387,8 +387,8 @@ class Adapter:
             return
         if layer.supabase_parent_layer_id is None:
             return
-        self.remove_layer(layer.supabase_layer_id)
         self._postgrest_client.merge_sub_layer(layer.supabase_layer_id)
+        self.remove_layer(layer.supabase_layer_id)
         self._all_layers.pop(layer.supabase_layer_id, None)
 
     def create_sub_layer(self, parent_layer: Layer, new_layer_name: str) -> None:

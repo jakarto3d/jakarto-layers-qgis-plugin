@@ -151,13 +151,18 @@ def test_create_sub_layer_no_selection(plugin, add_layer: Layer, message_box):
     assert message_box["warning"][0][0] == "No Features Selected"
 
 
-def test_create_sub_layer_from_sub_layer(plugin, add_layer: Layer, message_box):
-    add_layer.supabase_parent_layer_id = "123"
+def test_create_sub_layer_from_sub_layer(
+    plugin, add_layer: Layer, message_box, monkeypatch
+):
+    monkeypatch.setattr(add_layer, "supabase_parent_layer_id", "123")
     plugin.create_sub_layer(add_layer.supabase_layer_id)
     assert message_box["warning"][0][0] == "Already a sub-layer"
 
 
-def test_create_sub_layer_3_features(plugin, add_layer: Layer, monkeypatch):
+def test_create_sub_layer_3_features(
+    plugin, add_layer: Layer, monkeypatch, mock_session
+):
+    # given
     # Select some features from the layer
     layer = add_layer.qgis_layer
     features = list(layer.getFeatures())
@@ -173,8 +178,12 @@ def test_create_sub_layer_3_features(plugin, add_layer: Layer, monkeypatch):
         )
     )
     monkeypatch.setattr(jakarto_layers_qgis.plugin, "CreateSubLayerDialog", dialog)
+    mock_session.request.reset_mock()
+
+    # when
     plugin.create_sub_layer(add_layer.supabase_layer_id)
 
+    # then
     ids = list(plugin.adapter._all_layers.keys())
     assert len(ids) == 2
     sub_layer_id = ids[1]
@@ -186,3 +195,40 @@ def test_create_sub_layer_3_features(plugin, add_layer: Layer, monkeypatch):
     assert item.text(1) == "point"
     assert item.text(2) == "2949"
     assert item.data(0, Qt.ItemDataRole.UserRole) == sub_layer_id
+
+    assert mock_session.request.call_count == 2
+    layer_post = mock_session.request.call_args_list[0]
+    assert layer_post.kwargs["method"] == "POST"
+    assert layer_post.kwargs["url"] == "http://localhost:8000/rest/v1/layers"
+    assert layer_post.kwargs["json"]["name"] == "test_sub_layer"
+    assert layer_post.kwargs["json"]["parent_id"] == add_layer.supabase_layer_id
+
+    points_post = mock_session.request.call_args_list[1]
+    assert points_post.kwargs["method"] == "POST"
+    assert points_post.kwargs["url"] == "http://localhost:8000/rest/v1/points"
+    assert points_post.kwargs["json"][0]["layer_id"] == sub_layer_id
+    assert len(points_post.kwargs["json"]) == 3
+
+
+def test_merge_sub_layer(plugin, add_layer: Layer, mock_session):
+    """We don't test the actual sql function, because supabase is not running during tests"""
+    # given
+    layer = add_layer.qgis_layer
+    features = list(layer.getFeatures())
+    layer.selectByIds([f.id() for f in features[:3]])  # Select first 3 features
+    plugin.adapter.create_sub_layer(add_layer, "test_sub_layer")
+    sub_layer_id = list(plugin.adapter._all_layers.keys())[1]
+
+    mock_session.request.reset_mock()
+
+    # when
+    plugin.merge_sub_layer(sub_layer_id)
+
+    # then
+    assert mock_session.request.call_count == 1
+    merge_call = mock_session.request.call_args_list[0]
+    assert merge_call.kwargs["method"] == "POST"
+    assert (
+        merge_call.kwargs["url"] == "http://localhost:8000/rest/v1/rpc/merge_sub_layer"
+    )
+    assert merge_call.kwargs["json"]["sub_layer_id"] == sub_layer_id
