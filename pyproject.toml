@@ -2,3 +2,9 @@
 typeCheckingMode = "basic"
 reportInvalidTypeForm = "none"
 reportAssignmentType = "none"
+
+[tool.ruff]
+exclude = [
+    "jakarto_layers_qgis/vendor/**",
+    "jakarto_layers_qgis/ui/resources_rc.py"
+]
