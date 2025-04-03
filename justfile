@@ -18,6 +18,12 @@ venv:
 test *args:
     .venv/bin/pytest tests {{ args }}
 
+# Run tests with coverage
+coverage:
+    .venv/bin/coverage run -m pytest tests
+    .venv/bin/coverage report
+    .venv/bin/coverage html
+
 # Format the code
 format:
     .venv/bin/ruff format

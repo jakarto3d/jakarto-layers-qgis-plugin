@@ -3,3 +3,4 @@ ruff
 pytest
 pre-commit
 pytest-qgis
+coverage[toml]

@@ -8,3 +8,21 @@ exclude = [
     "jakarto_layers_qgis/vendor/**",
     "jakarto_layers_qgis/ui/resources_rc.py"
 ]
+
+[tool.coverage.run]
+source = ["jakarto_layers_qgis"]
+omit = [
+    "jakarto_layers_qgis/vendor/**",
+    "jakarto_layers_qgis/ui/resources_rc.py",
+    "tests/**"
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "pass",
+    "raise ImportError"
+]
