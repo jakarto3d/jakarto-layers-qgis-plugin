@@ -15,8 +15,8 @@ venv:
     echo ". .venv/bin/activate"
 
 # Run the tests
-test:
-    .venv/bin/pytest tests
+test *args:
+    .venv/bin/pytest tests {{ args }}
 
 # Format the code
 format:
