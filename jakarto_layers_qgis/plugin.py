@@ -9,6 +9,7 @@ from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import (
     QAction,
+    QDialog,
     QInputDialog,
     QMenu,
     QMessageBox,
@@ -344,14 +345,13 @@ class Plugin:
             QMessageBox.warning(
                 iface.mainWindow(),
                 "No Features Selected",
-                "Please select features from the loaded "
-                "layer before creating a sub-layer.",
+                "Please select features from the loaded layer to create a sub-layer.",
             )
             return
 
         dialog = CreateSubLayerDialog(parent=iface.mainWindow(), layer=layer)
 
-        accepted = CreateSubLayerDialog.DialogCode.Accepted
+        accepted = QDialog.DialogCode.Accepted
         if dialog.exec_() == accepted and dialog.properties:
             self.adapter.create_sub_layer(layer, dialog.properties.name)
             self.reload_layers(fetch_layers=False)

@@ -7,10 +7,13 @@ import qgis.utils
 from pytest_qgis import utils as pytest_qgis_utils
 from qgis.core import QgsProject
 from qgis.PyQt.QtCore import QDate, Qt
+from qgis.PyQt.QtWidgets import QDialog, QMessageBox
 
+import jakarto_layers_qgis.plugin
 from jakarto_layers_qgis import supabase_postgrest
 from jakarto_layers_qgis.layer import Layer
 from jakarto_layers_qgis.supabase_session import SupabaseSession
+from jakarto_layers_qgis.ui.create_sub_layer import CreateSubLayerDialog
 
 from .utils import get_response
 
@@ -71,6 +74,29 @@ def add_layer(plugin, load_layers) -> Layer:
     return layer
 
 
+@pytest.fixture
+def message_box():
+    _originals = {}
+    _messages = {}
+
+    def capture(level: str):
+        def _capture(parent, title, text, buttons=None):
+            _messages[level].append((title, text))
+
+        _originals[level] = getattr(QMessageBox, level)
+        setattr(QMessageBox, level, _capture)
+        _messages[level] = []
+
+    capture("information")
+    capture("warning")
+    capture("critical")
+
+    yield _messages
+
+    for level, original in _originals.items():
+        setattr(QMessageBox, level, original)
+
+
 def test_get_layers(plugin, load_layers):
     assert len(plugin.adapter._all_layers) == 1
     orig_layer = load_layers[0]
@@ -92,7 +118,7 @@ def test_get_layers(plugin, load_layers):
     assert item.data(0, Qt.ItemDataRole.UserRole) == supabase_layer_id
 
 
-def test_add_layer(plugin, add_layer):
+def test_add_layer(plugin, add_layer: Layer):
     tree_root = QgsProject.instance().layerTreeRoot()
     qgis_id = add_layer.qgis_layer.id()
     layer_node = tree_root.findLayer(qgis_id)
@@ -118,3 +144,45 @@ def test_add_layer(plugin, add_layer):
         "https://maps.jakarto.com/?lat=46.738992&lng=-71.298528&uid=jak2_20240727_63012s921ms",
         QDate(2024, 7, 27),
     ]
+
+
+def test_create_sub_layer_no_selection(plugin, add_layer: Layer, message_box):
+    plugin.create_sub_layer(add_layer.supabase_layer_id)
+    assert message_box["warning"][0][0] == "No Features Selected"
+
+
+def test_create_sub_layer_from_sub_layer(plugin, add_layer: Layer, message_box):
+    add_layer.supabase_parent_layer_id = "123"
+    plugin.create_sub_layer(add_layer.supabase_layer_id)
+    assert message_box["warning"][0][0] == "Already a sub-layer"
+
+
+def test_create_sub_layer_3_features(plugin, add_layer: Layer, monkeypatch):
+    # Select some features from the layer
+    layer = add_layer.qgis_layer
+    features = list(layer.getFeatures())
+    layer.selectByIds([f.id() for f in features[:3]])  # Select first 3 features
+
+    props = Mock()
+    props.name = "test_sub_layer"
+    dialog = Mock(
+        return_value=Mock(
+            spec=CreateSubLayerDialog,
+            exec_=Mock(return_value=QDialog.DialogCode.Accepted),
+            properties=props,
+        )
+    )
+    monkeypatch.setattr(jakarto_layers_qgis.plugin, "CreateSubLayerDialog", dialog)
+    plugin.create_sub_layer(add_layer.supabase_layer_id)
+
+    ids = list(plugin.adapter._all_layers.keys())
+    assert len(ids) == 2
+    sub_layer_id = ids[1]
+
+    assert plugin.panel.layerTree.topLevelItemCount() == 1
+    parent_item = plugin.panel.layerTree.topLevelItem(0)
+    item = parent_item.child(0)
+    assert item.text(0) == "test_sub_layer"
+    assert item.text(1) == "point"
+    assert item.text(2) == "2949"
+    assert item.data(0, Qt.ItemDataRole.UserRole) == sub_layer_id
