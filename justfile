@@ -14,6 +14,9 @@ venv:
     echo "Activate the venv with: "
     echo ". .venv/bin/activate"
 
+test:
+    .venv/bin/pytest tests
+
 # Run QGIS with the plugin folder set to the current directory
 [linux]
 run-qgis:
