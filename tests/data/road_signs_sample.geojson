@@ -1,0 +1,227 @@
+{
+    "type": "FeatureCollection",
+    "crs": {
+        "type": "name",
+        "properties": {
+            "name": "urn:ogc:def:crs:EPSG::2949"
+        }
+    },
+    "features": [
+        {
+            "type": "Feature",
+            "properties": {
+                "fid": 1243,
+                "uuid": "506ebca3-eba4-4021-a935-1072bc2372a5",
+                "uuid_support": "80ba8743-c8ae-4c05-9bf1-b20e581efed9",
+                "p_code": "JAK-I-140",
+                "degagement_m": "3.02",
+                "nom_rue": "Rue De La Corniche",
+                "classe_panneau": "Ville",
+                "model_panneau": "./model_panneau/jak-i-140.png",
+                "photo_panneau": "./photo_panneau/jak2_20240727_63011s041ms.png",
+                "jakartowns_url": "https://maps.jakarto.com/?lat=46.738992&lng=-71.298528&uid=jak2_20240727_63012s921ms",
+                "date_numerisation": "2024-07-27"
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    243778.215,
+                    5178023.057,
+                    29.817
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "fid": 1244,
+                "uuid": "23fcb31b-6c33-4aec-8c1c-a132a9fdc0cf",
+                "uuid_support": "826a9a77-c80b-4a74-a3c3-c76335013a8d",
+                "p_code": "I-295-1",
+                "degagement_m": "1.83",
+                "nom_rue": "",
+                "classe_panneau": "Indication",
+                "model_panneau": "./model_panneau/i-295-1.png",
+                "photo_panneau": "./photo_panneau/jak2_20240727_62963s641ms.png",
+                "jakartowns_url": "https://maps.jakarto.com/?lat=46.739168&lng=-71.29717&uid=jak2_20240727_62965s201ms",
+                "date_numerisation": "2024-07-27"
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    243882.244,
+                    5178041.59,
+                    28.998
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "fid": 1245,
+                "uuid": "cfe931e4-0bdf-4d03-8240-b6ebe4e6392d",
+                "uuid_support": "23f148dd-b0c2-4617-b5d8-4263f68e6bb2",
+                "p_code": "P-10-arret",
+                "degagement_m": "2.92",
+                "nom_rue": "",
+                "classe_panneau": "Stop",
+                "model_panneau": "./model_panneau/p-10-arret.png",
+                "photo_panneau": "./photo_panneau/jak2_20240727_62977s081ms_000.png",
+                "jakartowns_url": "https://maps.jakarto.com/?lat=46.738718&lng=-71.296398&uid=jak2_20240727_62978s401ms",
+                "date_numerisation": "2024-07-27"
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    243940.703,
+                    5177990.939,
+                    30.155
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "fid": 1246,
+                "uuid": "298c24ab-d965-49a2-8eff-819f57ffa5d8",
+                "uuid_support": "23f148dd-b0c2-4617-b5d8-4263f68e6bb2",
+                "p_code": "JAK-I-140",
+                "degagement_m": "2.98",
+                "nom_rue": "Rue De La Corniche",
+                "classe_panneau": "Ville",
+                "model_panneau": "./model_panneau/jak-i-140.png",
+                "photo_panneau": "./photo_panneau/jak2_20240727_62976s041ms.png",
+                "jakartowns_url": "https://maps.jakarto.com/?lat=46.738718&lng=-71.296396&uid=jak2_20240727_62978s401ms",
+                "date_numerisation": "2024-07-27"
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    243940.836,
+                    5177990.914,
+                    30.964
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "fid": 1247,
+                "uuid": "744376ad-a62e-47d2-99bc-d8bedb5cb753",
+                "uuid_support": "62d64574-efba-4906-8e3a-aa1db395112d",
+                "p_code": "I-295-1",
+                "degagement_m": "2.61",
+                "nom_rue": "",
+                "classe_panneau": "Indication",
+                "model_panneau": "./model_panneau/i-295-1.png",
+                "photo_panneau": "./photo_panneau/jak2_20240727_62986s881ms.png",
+                "jakartowns_url": "https://maps.jakarto.com/?lat=46.738362&lng=-71.296858&uid=jak2_20240727_62988s921ms",
+                "date_numerisation": "2024-07-27"
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    243905.165,
+                    5177951.723,
+                    30.654
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "fid": 1248,
+                "uuid": "ae8a5e90-4280-44c3-b6fa-1d13ee03e6d0",
+                "uuid_support": "0b22c4ba-5a34-4cb6-8cb0-8b7a5d2f499a",
+                "p_code": "I-295-1",
+                "degagement_m": "2.64",
+                "nom_rue": "",
+                "classe_panneau": "Indication",
+                "model_panneau": "./model_panneau/i-295-1.png",
+                "photo_panneau": "./photo_panneau/jak2_20240727_63004s561ms.png",
+                "jakartowns_url": "https://maps.jakarto.com/?lat=46.738602&lng=-71.298209&uid=jak2_20240727_63005s281ms",
+                "date_numerisation": "2024-07-27"
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    243802.17,
+                    5177979.494,
+                    30.283
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "fid": 1249,
+                "uuid": "9bb6b173-067c-482f-97a2-b236db3ec5e5",
+                "uuid_support": "80ba8743-c8ae-4c05-9bf1-b20e581efed9",
+                "p_code": "P-10-arret",
+                "degagement_m": "3.02",
+                "nom_rue": "",
+                "classe_panneau": "Stop",
+                "model_panneau": "./model_panneau/p-10-arret.png",
+                "photo_panneau": "./photo_panneau/jak2_20240727_63011s041ms.png",
+                "jakartowns_url": "https://maps.jakarto.com/?lat=46.738992&lng=-71.298528&uid=jak2_20240727_63012s921ms",
+                "date_numerisation": "2024-07-27"
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    243778.224,
+                    5178023.031,
+                    29.181
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "fid": 1250,
+                "uuid": "f815f5e9-4249-414f-a79e-eb08169bf870",
+                "uuid_support": "80ba8743-c8ae-4c05-9bf1-b20e581efed9",
+                "p_code": "JAK-I-140",
+                "degagement_m": "3.04",
+                "nom_rue": "Rue Des Chardonnerets",
+                "classe_panneau": "Ville",
+                "model_panneau": "./model_panneau/jak-i-140.png",
+                "photo_panneau": "./photo_panneau/jak2_20240727_63012s921ms_000.png",
+                "jakartowns_url": "https://maps.jakarto.com/?lat=46.738991&lng=-71.298529&uid=jak2_20240727_63012s921ms",
+                "date_numerisation": "2024-07-27"
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    243778.188,
+                    5178022.983,
+                    30.002
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "fid": 2511,
+                "uuid": "c732676b-fd8e-4a30-b125-7cf7eff44a49",
+                "uuid_support": "23f148dd-b0c2-4617-b5d8-4263f68e6bb2",
+                "p_code": "JAK-I-140",
+                "degagement_m": "2.92",
+                "nom_rue": "",
+                "classe_panneau": "Ville",
+                "model_panneau": "./model_panneau/jak-i-140.png",
+                "photo_panneau": "./photo_panneau/jak2_20240727_62977s081ms_ag_002.jpg",
+                "jakartowns_url": "https://maps.jakarto.com/?lat=46.738718&lng=-71.296398&uid=jak2_20240727_62977s081ms",
+                "date_numerisation": "2024-07-27"
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    243940.738,
+                    5177990.894,
+                    30.859
+                ]
+            }
+        }
+    ]
+}

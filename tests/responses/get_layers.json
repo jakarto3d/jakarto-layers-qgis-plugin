@@ -1,0 +1,57 @@
+[
+    {
+        "id": "b2f94d35-26af-442a-95dd-f9c578bd3798",
+        "created_at": "2025-04-03T14:31:00.082774+00:00",
+        "created_by": "533ad0df-656f-44b2-827c-b6b13774834e",
+        "name": "road_signs_sample",
+        "geometry_type": "point",
+        "attributes": [
+            {
+                "name": "fid",
+                "type": "int"
+            },
+            {
+                "name": "uuid",
+                "type": "str"
+            },
+            {
+                "name": "uuid_support",
+                "type": "str"
+            },
+            {
+                "name": "p_code",
+                "type": "str"
+            },
+            {
+                "name": "degagement_m",
+                "type": "str"
+            },
+            {
+                "name": "nom_rue",
+                "type": "str"
+            },
+            {
+                "name": "classe_panneau",
+                "type": "str"
+            },
+            {
+                "name": "model_panneau",
+                "type": "str"
+            },
+            {
+                "name": "photo_panneau",
+                "type": "str"
+            },
+            {
+                "name": "jakartowns_url",
+                "type": "str"
+            },
+            {
+                "name": "date_numerisation",
+                "type": "date"
+            }
+        ],
+        "srid": 2949,
+        "parent_id": null
+    }
+]

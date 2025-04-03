@@ -2,3 +2,4 @@ pyqt5-stubs
 ruff
 pytest
 pre-commit
+pytest-qgis
