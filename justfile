@@ -6,10 +6,9 @@ _default:
 venv:
     #!/usr/bin/env bash
     if [ -d ".venv" ]; then rm -rf .venv; fi
-    /usr/bin/python3 -m venv --system-site-packages .venv
-    . .venv/bin/activate
-    pip install -r requirements.txt
-    pip install -r requirements-dev.txt
+    uv venv --system-site-packages --python /usr/bin/python3
+    uv pip install -r requirements.txt
+    uv pip install -r requirements-dev.txt
     .venv/bin/pre-commit install
 
     echo "Activate the venv with: "
