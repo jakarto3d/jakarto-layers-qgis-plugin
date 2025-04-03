@@ -18,7 +18,7 @@ from qgis.PyQt.QtWidgets import (
 from qgis.utils import iface
 
 from .adapter import Adapter
-from .create_sub_layer_ui import CreateSubLayerDialog
+from .ui.create_sub_layer import CreateSubLayerDialog
 from .ui.main_panel import MainPanel
 
 iface: QgisInterface

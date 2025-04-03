@@ -12,7 +12,7 @@ from qgis.PyQt.QtWidgets import (
     QWidget,
 )
 
-from .layer import Layer
+from ..layer import Layer
 
 
 @dataclass
