@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from typing import Optional
 
-from qgis.core import Qgis, QgsFeature, QgsGeometry, QgsVectorLayer
 from qgis.PyQt.QtWidgets import (
     QDialog,
     QLabel,

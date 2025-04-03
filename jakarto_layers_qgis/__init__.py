@@ -1,7 +1,7 @@
 import sys
 
 sys.path.insert(0, __file__.rsplit("/", 1)[0] + "/vendor")
-from . import vendor
+from . import vendor  # noqa: F401
 
 # This may cause issues if the vendorized packages don't make all their imports
 # when the base module is imported.

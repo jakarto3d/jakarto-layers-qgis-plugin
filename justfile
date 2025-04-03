@@ -17,6 +17,10 @@ venv:
 test:
     .venv/bin/pytest tests
 
+format:
+    .venv/bin/ruff format
+    .venv/bin/ruff check --fix
+
 # Run QGIS with the plugin folder set to the current directory
 [linux]
 run-qgis:

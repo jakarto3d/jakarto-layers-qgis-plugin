@@ -27,7 +27,7 @@ from .supabase_events import (
     SupabaseUpdateMessage,
     parse_message,
 )
-from .supabase_models import LayerAttribute, SupabaseFeature, SupabaseLayer
+from .supabase_models import SupabaseFeature, SupabaseLayer
 from .supabase_postgrest import Postgrest
 from .supabase_session import SupabaseSession
 from .vendor.realtime import AsyncRealtimeClient

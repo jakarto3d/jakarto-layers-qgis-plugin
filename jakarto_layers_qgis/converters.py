@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
 from typing import TYPE_CHECKING, Any
 
 from qgis.core import (
