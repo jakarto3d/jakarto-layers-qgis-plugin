@@ -5,13 +5,14 @@ from unittest.mock import Mock
 import pytest
 import qgis.utils
 from pytest_qgis import utils as pytest_qgis_utils
-from qgis.core import QgsProject
+from qgis.core import QgsFeature, QgsGeometry, QgsPoint, QgsProject
 from qgis.PyQt.QtCore import QDate, Qt
 from qgis.PyQt.QtWidgets import QDialog, QMessageBox
 
 import jakarto_layers_qgis.plugin
 from jakarto_layers_qgis import supabase_postgrest
 from jakarto_layers_qgis.layer import Layer
+from jakarto_layers_qgis.supabase_models import LayerAttribute
 from jakarto_layers_qgis.supabase_session import SupabaseSession
 from jakarto_layers_qgis.ui.create_sub_layer import CreateSubLayerDialog
 
@@ -74,6 +75,13 @@ def add_layer(plugin, load_layers) -> Layer:
     return layer
 
 
+def first_point_attrs(attributes: list[LayerAttribute]):
+    sample_data = get_response("get_points.json").json()
+    attrs = [sample_data[0]["attributes"][key] for key in [a.name for a in attributes]]
+    attrs[-1] = QDate(2024, 7, 27)
+    return attrs
+
+
 @pytest.fixture
 def message_box():
     _originals = {}
@@ -131,19 +139,7 @@ def test_add_layer(plugin, add_layer: Layer):
     assert geom.x() == 243778.215
     assert geom.y() == 5178023.057
     assert geom.z() == 29.817
-    assert features[0].attributes() == [
-        1243,
-        "506ebca3-eba4-4021-a935-1072bc2372a5",
-        "80ba8743-c8ae-4c05-9bf1-b20e581efed9",
-        "JAK-I-140",
-        "3.02",
-        "Rue De La Corniche",
-        "Ville",
-        "./model_panneau/jak-i-140.png",
-        "./photo_panneau/jak2_20240727_63011s041ms.png",
-        "https://maps.jakarto.com/?lat=46.738992&lng=-71.298528&uid=jak2_20240727_63012s921ms",
-        QDate(2024, 7, 27),
-    ]
+    assert features[0].attributes() == first_point_attrs(add_layer.attributes)
 
 
 def test_create_sub_layer_no_selection(plugin, add_layer: Layer, message_box):
@@ -232,3 +228,24 @@ def test_merge_sub_layer(plugin, add_layer: Layer, mock_session):
         merge_call.kwargs["url"] == "http://localhost:8000/rest/v1/rpc/merge_sub_layer"
     )
     assert merge_call.kwargs["json"]["sub_layer_id"] == sub_layer_id
+
+
+def test_add_feature_in_qgis(qgis_iface, plugin, add_layer: Layer, mock_session):
+    # given
+    mock_session.request.reset_mock()
+
+    qgis_feature = QgsFeature()
+    qgis_feature.setGeometry(QgsGeometry.fromPoint(QgsPoint(243778, 5178023, 29)))
+    attrs = first_point_attrs(add_layer.attributes)
+    qgis_feature.setAttributes(attrs)
+
+    # when
+    add_layer.on_event_added(add_layer.supabase_layer_id, [qgis_feature])
+    add_layer.after_commit()
+
+    # then
+    assert mock_session.request.call_count == 1
+    add_call = mock_session.request.call_args_list[0]
+    assert add_call.kwargs["method"] == "POST"
+    assert add_call.kwargs["url"] == "http://localhost:8000/rest/v1/points"
+    assert add_call.kwargs["json"]["attributes"]["fid"] == 1243
