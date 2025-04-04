@@ -216,7 +216,6 @@ class Layer:
 
     def on_realtime_insert(self, feature: SupabaseFeature) -> None:
         """Called when an insert message is received from the realtime server."""
-
         if feature.id in self._supabase_id_to_qgis_id:
             return  # echo of a qgis_insert event
 
@@ -232,7 +231,9 @@ class Layer:
             self.qgis_layer.rollBack()
             raise
         finally:
-            iface.vectorLayerTools().stopEditing(self.qgis_layer)
+            if hasattr(iface, "vectorLayerTools"):
+                # iface has no vectorLayerTools in tests
+                iface.vectorLayerTools().stopEditing(self.qgis_layer)
 
     def on_realtime_update(self, feature: SupabaseFeature) -> None:
         """Called when an update message is received from the realtime server."""
@@ -271,7 +272,9 @@ class Layer:
             self.qgis_layer.rollBack()
             raise
         finally:
-            iface.vectorLayerTools().stopEditing(self.qgis_layer)
+            if hasattr(iface, "vectorLayerTools"):
+                # iface has no vectorLayerTools in tests
+                iface.vectorLayerTools().stopEditing(self.qgis_layer)
 
     def on_realtime_delete(self, supabase_feature_id: str) -> bool:
         """Called when a delete message is received from the realtime server."""
@@ -284,15 +287,22 @@ class Layer:
         self.qgis_layer.startEditing()
 
         try:
-            self.qgis_layer.deleteFeature(qgis_id)
-            self.qgis_layer.commitChanges()
+            # remove from those dicts before deleting the feature
+            # to avoid infinite loop when on_event_removed is called
             self._supabase_id_to_qgis_id.pop(supabase_feature_id)
             self._qgis_id_to_supabase_id.pop(qgis_id)
+            self.qgis_layer.deleteFeature(qgis_id)
+            self.qgis_layer.commitChanges()
             self.qgis_layer.updateExtents()
         except:
             self.qgis_layer.rollBack()
+            # restore the dicts
+            self._supabase_id_to_qgis_id[supabase_feature_id] = qgis_id
+            self._qgis_id_to_supabase_id[qgis_id] = supabase_feature_id
             raise
         finally:
-            iface.vectorLayerTools().stopEditing(self.qgis_layer)
+            if hasattr(iface, "vectorLayerTools"):
+                # iface has no vectorLayerTools in tests
+                iface.vectorLayerTools().stopEditing(self.qgis_layer)
 
         return True

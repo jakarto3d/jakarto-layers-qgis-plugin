@@ -349,7 +349,9 @@ class Adapter:
         thread = threading.Thread(target=_thread_func, daemon=True)
         thread.start()
 
-    def on_supabase_realtime_event(self, event_data: dict) -> None:
+    def on_supabase_realtime_event(
+        self, event_data: dict, only_print_errors: bool = True
+    ) -> None:
         try:
             message = parse_message(event_data)
             if message is None:
@@ -369,7 +371,10 @@ class Adapter:
                     if layer.on_realtime_delete(message.old_record_id):
                         break
         except Exception:
-            traceback.print_exc()
+            if only_print_errors:
+                traceback.print_exc()
+            else:
+                raise
 
     def stop_realtime(self) -> None:
         self._realtime_thread_event.set()

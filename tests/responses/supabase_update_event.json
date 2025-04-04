@@ -1,0 +1,74 @@
+{
+    "data": {
+        "table": "points",
+        "type": "UPDATE",
+        "record": {
+            "attributes": {
+                "classe_panneau": "Indication",
+                "date_numerisation": "2024-07-27",
+                "degagement_m": "1.83",
+                "fid": 1246,
+                "jakartowns_url": "https://maps.jakarto.com/?lat=46.739168&lng=-71.29717&uid=jak2_20240727_62965s201ms",
+                "model_panneau": "./model_panneau/i-295-1.png",
+                "nom_rue": "",
+                "p_code": "I-295-1",
+                "photo_panneau": "./photo_panneau/jak2_20240727_62963s641ms.png",
+                "uuid": "23fcb31b-6c33-4aec-8c1c-a132a9fdc0cf",
+                "uuid_support": "826a9a77-c80b-4a74-a3c3-c76335013a8d"
+            },
+            "created_at": "2025-04-03T14:31:00.096061+00:00",
+            "geom": {
+                "coordinates": [
+                    243876.4061511578,
+                    5178049.351885286,
+                    28.998
+                ],
+                "crs": {
+                    "properties": {
+                        "name": "EPSG:4326"
+                    },
+                    "type": "name"
+                },
+                "type": "Point"
+            },
+            "id": "83aeeb80-732b-4f7c-92a7-e247622c4175",
+            "layer_id": "b2f94d35-26af-442a-95dd-f9c578bd3798",
+            "parent_id": null
+        },
+        "columns": [
+            {
+                "name": "id",
+                "type": "uuid"
+            },
+            {
+                "name": "layer_id",
+                "type": "uuid"
+            },
+            {
+                "name": "created_at",
+                "type": "timestamptz"
+            },
+            {
+                "name": "geom",
+                "type": "geometry"
+            },
+            {
+                "name": "attributes",
+                "type": "jsonb"
+            },
+            {
+                "name": "parent_id",
+                "type": "uuid"
+            }
+        ],
+        "errors": null,
+        "schema": "public",
+        "commit_timestamp": "2025-04-04T01:54:12.496Z",
+        "old_record": {
+            "id": "83aeeb80-732b-4f7c-92a7-e247622c4175"
+        }
+    },
+    "ids": [
+        65027723
+    ]
+}

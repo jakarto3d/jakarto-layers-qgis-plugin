@@ -1,14 +1,21 @@
 import os
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from unittest.mock import Mock
 
 import pytest
 import qgis.utils
 from pytest_qgis import utils as pytest_qgis_utils
-from qgis.core import QgsFeature, QgsGeometry, QgsPoint, QgsProject
-from qgis.PyQt.QtCore import QDate, Qt
-from qgis.PyQt.QtWidgets import QDialog, QInputDialog, QMessageBox
+from qgis.core import (
+    QgsFeature,
+    QgsField,
+    QgsGeometry,
+    QgsPoint,
+    QgsProject,
+    QgsVectorLayer,
+)
+from qgis.PyQt.QtCore import QDate, QMetaType, QPoint, Qt
+from qgis.PyQt.QtWidgets import QAction, QDialog, QInputDialog, QMenu, QMessageBox
 
 import jakarto_layers_qgis.plugin
 from jakarto_layers_qgis import supabase_postgrest
@@ -17,7 +24,7 @@ from jakarto_layers_qgis.supabase_models import LayerAttribute
 from jakarto_layers_qgis.supabase_session import SupabaseSession
 from jakarto_layers_qgis.ui.create_sub_layer import CreateSubLayerDialog
 
-from .utils import get_response
+from .utils import get_data_path, get_response, get_response_file
 
 PLUGIN_NAME = "jakarto_layers_qgis"
 MOCK_SESSION = not bool(os.environ.get("NO_MOCK_SESSION"))
@@ -67,7 +74,13 @@ def mock_response(plugin, filename: str):
 
 
 @pytest.fixture
-def load_layers(plugin, mock_session) -> list[Layer]:
+def clear_layers(plugin):
+    plugin.adapter.remove_all_layers()
+    plugin.adapter._all_layers.clear()
+
+
+@pytest.fixture
+def load_layers(plugin, clear_layers, mock_session) -> list[Layer]:
     with mock_response(plugin, "get_layers.json"):
         plugin.reload_layers()
 
@@ -264,7 +277,7 @@ def test_rename_layer(plugin, add_layer: Layer, mock_session, monkeypatch):
     assert request.json["name"] == "new_name"
 
 
-def test_add_feature_in_qgis(qgis_iface, plugin, add_layer: Layer, mock_session):
+def test_add_feature_in_qgis(add_layer: Layer, mock_session):
     # given
     qgis_feature = QgsFeature()
     qgis_feature.setGeometry(QgsGeometry.fromPoint(QgsPoint(243778, 5178023, 29)))
@@ -282,3 +295,189 @@ def test_add_feature_in_qgis(qgis_iface, plugin, add_layer: Layer, mock_session)
     assert request.method == "POST"
     assert request.url == "http://localhost:8000/rest/v1/points"
     assert request.json["attributes"]["fid"] == 1243
+
+
+def test_update_feature_in_qgis(add_layer: Layer, mock_session):
+    # given
+    qgis_feature = list(add_layer.qgis_layer.getFeatures())[0]
+
+    # when
+    add_layer.qgis_layer.startEditing()
+    qgis_feature.setAttribute(0, 1111)
+    add_layer.qgis_layer.updateFeature(qgis_feature)
+    add_layer.qgis_layer.commitChanges()
+
+    # then
+    assert mock_session.request.call_count == 1
+    update_call = mock_session.request.call_args_list[0]
+    request = Request(**update_call.kwargs)
+    assert request.method == "PATCH"
+    assert request.url == "http://localhost:8000/rest/v1/points"
+    assert request.json["attributes"]["fid"] == 1111
+
+
+def test_delete_feature_in_qgis(add_layer: Layer, mock_session):
+    # given
+    qgis_feature = list(add_layer.qgis_layer.getFeatures())[0]
+    supabase_id = add_layer.get_supabase_feature_id(qgis_feature.id())
+
+    # when
+    add_layer.qgis_layer.startEditing()
+    add_layer.qgis_layer.deleteFeature(qgis_feature.id())
+    add_layer.qgis_layer.commitChanges()
+
+    # then
+    assert mock_session.request.call_count == 1
+    delete_call = mock_session.request.call_args_list[0]
+    request = Request(**delete_call.kwargs)
+    assert request.method == "DELETE"
+    assert request.url == "http://localhost:8000/rest/v1/points"
+    assert request.params["id"] == f"eq.{supabase_id}"
+
+
+def test_add_attribute_in_qgis(add_layer: Layer, mock_session):
+    # when
+    attribs = [asdict(a) for a in add_layer.attributes]
+    attribs.append({"name": "new_attr", "type": "str"})
+    layer = add_layer.qgis_layer
+    layer.startEditing()
+    layer.addAttribute(QgsField("new_attr", QMetaType.QString))
+    layer.commitChanges()
+
+    # then
+    assert mock_session.request.call_count == 1
+    add_call = mock_session.request.call_args_list[0]
+    request = Request(**add_call.kwargs)
+    assert request.method == "PATCH"
+    assert request.url == "http://localhost:8000/rest/v1/layers"
+    assert request.params["id"] == f"eq.{add_layer.supabase_layer_id}"
+    assert request.json["attributes"] == attribs
+
+
+def test_remove_attribute_in_qgis(add_layer: Layer, mock_session):
+    # when
+    attribs = [asdict(a) for a in add_layer.attributes]
+    attribs.pop(0)
+    layer = add_layer.qgis_layer
+    layer.startEditing()
+    layer.deleteAttribute(0)
+    layer.commitChanges()
+
+    # then
+    assert mock_session.request.call_count == 1
+    remove_call = mock_session.request.call_args_list[0]
+    request = Request(**remove_call.kwargs)
+    assert request.method == "PATCH"
+    assert request.url == "http://localhost:8000/rest/v1/layers"
+    assert request.params["id"] == f"eq.{add_layer.supabase_layer_id}"
+    assert request.json["attributes"] == attribs
+
+
+def test_add_feature_in_supabase(plugin, add_layer: Layer):
+    # given
+    insert_event = get_response_file("supabase_insert_event.json")
+    supabase_id = insert_event["data"]["record"]["id"]
+    assert add_layer.qgis_layer.featureCount() == 9
+
+    # when
+    plugin.adapter.on_supabase_realtime_event(insert_event, only_print_errors=False)
+
+    # then
+    assert add_layer.qgis_layer.featureCount() == 10
+    assert add_layer.get_qgis_feature_id(supabase_id) is not None
+
+
+def test_update_feature_in_supabase(plugin, add_layer: Layer):
+    # given
+    update_event = get_response_file("supabase_update_event.json")
+    supabase_id = update_event["data"]["record"]["id"]
+    assert add_layer.qgis_layer.featureCount() == 9
+
+    # when
+    plugin.adapter.on_supabase_realtime_event(update_event, only_print_errors=False)
+
+    # then
+    assert add_layer.qgis_layer.featureCount() == 9
+    feature_id = add_layer.get_qgis_feature_id(supabase_id)
+    assert feature_id is not None
+    qgis_feature = add_layer.get_qgis_feature(feature_id)
+    assert qgis_feature is not None
+    assert qgis_feature.attributeMap()["fid"] == 1246
+
+
+def test_delete_feature_in_supabase(plugin, add_layer: Layer):
+    # given
+    delete_event = get_response_file("supabase_delete_event.json")
+    supabase_id = delete_event["data"]["old_record"]["id"]
+    assert add_layer.qgis_layer.featureCount() == 9
+
+    # when
+    plugin.adapter.on_supabase_realtime_event(delete_event, only_print_errors=False)
+
+    # then
+    assert add_layer.qgis_layer.featureCount() == 8
+    assert add_layer.get_qgis_feature_id(supabase_id) is None
+
+
+def test_import_layer(plugin, clear_layers, mock_session):
+    # given
+    geojson = get_data_path("road_signs_sample.geojson")
+    layer = QgsVectorLayer(f"geojson://{geojson}", "road_signs_sample", "ogr")
+    assert layer.featureCount() == 9
+
+    # when
+    plugin.adapter.import_layer(layer)
+
+    # then
+    assert len(plugin.adapter._all_layers) == 1
+    layer = list(plugin.adapter._all_layers.values())[0]
+    assert layer.name == "road_signs_sample"
+    assert layer.geometry_type == "point"
+    assert layer.attributes == [
+        LayerAttribute(name="fid", type="int"),
+        LayerAttribute(name="uuid", type="str"),
+        LayerAttribute(name="uuid_support", type="str"),
+        LayerAttribute(name="p_code", type="str"),
+        LayerAttribute(name="degagement_m", type="str"),
+        LayerAttribute(name="nom_rue", type="str"),
+        LayerAttribute(name="classe_panneau", type="str"),
+        LayerAttribute(name="model_panneau", type="str"),
+        LayerAttribute(name="photo_panneau", type="str"),
+        LayerAttribute(name="jakartowns_url", type="str"),
+        LayerAttribute(name="date_numerisation", type="date"),
+    ]
+
+    assert mock_session.request.call_count == 2
+    layer_call = mock_session.request.call_args_list[0]
+    request = Request(**layer_call.kwargs)
+    assert request.method == "POST"
+    assert request.url == "http://localhost:8000/rest/v1/layers"
+    assert request.json["name"] == "road_signs_sample"
+
+    points_call = mock_session.request.call_args_list[1]
+    request = Request(**points_call.kwargs)
+    assert request.method == "POST"
+    assert request.url == "http://localhost:8000/rest/v1/points"
+    assert len(request.json) == 9
+    assert request.json[0]["attributes"]["fid"] == 1243
+
+
+def test_drop_layer(plugin, add_layer: Layer, mock_session):
+    # given
+    plugin.adapter.drop_layer(add_layer.supabase_layer_id)
+
+    # then
+    assert len(plugin.adapter._all_layers) == 0
+
+    assert mock_session.request.call_count == 1
+    drop_call = mock_session.request.call_args_list[0]
+    request = Request(**drop_call.kwargs)
+    assert request.method == "DELETE"
+    assert request.url == "http://localhost:8000/rest/v1/layers"
+    assert request.params["id"] == f"eq.{add_layer.supabase_layer_id}"
+
+
+def test_context_menu(plugin, add_layer: Layer, monkeypatch):
+    """Only test context menu generation"""
+    monkeypatch.setattr(QMenu, "exec_", lambda *a, **kw: QAction(text="Load Layer"))
+    plugin.show_layer_context_menu(QPoint(0, 0))

@@ -1,0 +1,41 @@
+{
+    "data": {
+        "table": "points",
+        "type": "DELETE",
+        "columns": [
+            {
+                "name": "id",
+                "type": "uuid"
+            },
+            {
+                "name": "layer_id",
+                "type": "uuid"
+            },
+            {
+                "name": "created_at",
+                "type": "timestamptz"
+            },
+            {
+                "name": "geom",
+                "type": "geometry"
+            },
+            {
+                "name": "attributes",
+                "type": "jsonb"
+            },
+            {
+                "name": "parent_id",
+                "type": "uuid"
+            }
+        ],
+        "errors": null,
+        "schema": "public",
+        "commit_timestamp": "2025-04-04T01:56:40.341Z",
+        "old_record": {
+            "id": "83aeeb80-732b-4f7c-92a7-e247622c4175"
+        }
+    },
+    "ids": [
+        65027722
+    ]
+}
