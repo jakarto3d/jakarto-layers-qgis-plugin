@@ -1,5 +1,6 @@
 import os
 from contextlib import contextmanager
+from dataclasses import dataclass, field
 from unittest.mock import Mock
 
 import pytest
@@ -7,7 +8,7 @@ import qgis.utils
 from pytest_qgis import utils as pytest_qgis_utils
 from qgis.core import QgsFeature, QgsGeometry, QgsPoint, QgsProject
 from qgis.PyQt.QtCore import QDate, Qt
-from qgis.PyQt.QtWidgets import QDialog, QMessageBox
+from qgis.PyQt.QtWidgets import QDialog, QInputDialog, QMessageBox
 
 import jakarto_layers_qgis.plugin
 from jakarto_layers_qgis import supabase_postgrest
@@ -20,6 +21,16 @@ from .utils import get_response
 
 PLUGIN_NAME = "jakarto_layers_qgis"
 MOCK_SESSION = not bool(os.environ.get("NO_MOCK_SESSION"))
+
+
+@dataclass
+class Request:
+    method: str
+    url: str
+    params: dict = field(default_factory=dict)
+    json: dict = field(default_factory=dict)
+    headers: dict = field(default_factory=dict)
+    timeout: int = field(default=5)
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -194,16 +205,18 @@ def test_create_sub_layer_3_features(
 
     assert mock_session.request.call_count == 2
     layer_post = mock_session.request.call_args_list[0]
-    assert layer_post.kwargs["method"] == "POST"
-    assert layer_post.kwargs["url"] == "http://localhost:8000/rest/v1/layers"
-    assert layer_post.kwargs["json"]["name"] == "test_sub_layer"
-    assert layer_post.kwargs["json"]["parent_id"] == add_layer.supabase_layer_id
+    request = Request(**layer_post.kwargs)
+    assert request.method == "POST"
+    assert request.url == "http://localhost:8000/rest/v1/layers"
+    assert request.json["name"] == "test_sub_layer"
+    assert request.json["parent_id"] == add_layer.supabase_layer_id
 
     points_post = mock_session.request.call_args_list[1]
-    assert points_post.kwargs["method"] == "POST"
-    assert points_post.kwargs["url"] == "http://localhost:8000/rest/v1/points"
-    assert points_post.kwargs["json"][0]["layer_id"] == sub_layer_id
-    assert len(points_post.kwargs["json"]) == 3
+    request = Request(**points_post.kwargs)
+    assert request.method == "POST"
+    assert request.url == "http://localhost:8000/rest/v1/points"
+    assert request.json[0]["layer_id"] == sub_layer_id
+    assert len(request.json) == 3
 
 
 def test_merge_sub_layer(plugin, add_layer: Layer, mock_session):
@@ -223,11 +236,10 @@ def test_merge_sub_layer(plugin, add_layer: Layer, mock_session):
     # then
     assert mock_session.request.call_count == 1
     merge_call = mock_session.request.call_args_list[0]
-    assert merge_call.kwargs["method"] == "POST"
-    assert (
-        merge_call.kwargs["url"] == "http://localhost:8000/rest/v1/rpc/merge_sub_layer"
-    )
-    assert merge_call.kwargs["json"]["sub_layer_id"] == sub_layer_id
+    request = Request(**merge_call.kwargs)
+    assert request.method == "POST"
+    assert request.url == "http://localhost:8000/rest/v1/rpc/merge_sub_layer"
+    assert request.json["sub_layer_id"] == sub_layer_id
 
 
 def test_add_feature_in_qgis(qgis_iface, plugin, add_layer: Layer, mock_session):
@@ -246,6 +258,25 @@ def test_add_feature_in_qgis(qgis_iface, plugin, add_layer: Layer, mock_session)
     # then
     assert mock_session.request.call_count == 1
     add_call = mock_session.request.call_args_list[0]
-    assert add_call.kwargs["method"] == "POST"
-    assert add_call.kwargs["url"] == "http://localhost:8000/rest/v1/points"
-    assert add_call.kwargs["json"]["attributes"]["fid"] == 1243
+    request = Request(**add_call.kwargs)
+    assert request.method == "POST"
+    assert request.url == "http://localhost:8000/rest/v1/points"
+    assert request.json["attributes"]["fid"] == 1243
+
+
+def test_rename_layer(plugin, add_layer: Layer, mock_session, monkeypatch):
+    # given
+    mock_session.request.reset_mock()
+    monkeypatch.setattr(QInputDialog, "getText", lambda *a, **kw: ("new_name", True))
+
+    # when
+    plugin.rename_layer(add_layer.supabase_layer_id)
+
+    # then
+    assert mock_session.request.call_count == 1
+    rename_call = mock_session.request.call_args_list[0]
+    request = Request(**rename_call.kwargs)
+    assert request.method == "PATCH"
+    assert request.url == "http://localhost:8000/rest/v1/layers"
+    assert request.params["id"] == f"eq.{add_layer.supabase_layer_id}"
+    assert request.json["name"] == "new_name"
