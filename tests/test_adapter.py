@@ -67,21 +67,27 @@ def mock_response(plugin, filename: str):
 
 
 @pytest.fixture
-def load_layers(plugin) -> list[Layer]:
+def load_layers(plugin, mock_session) -> list[Layer]:
     with mock_response(plugin, "get_layers.json"):
         plugin.reload_layers()
+
+    if MOCK_SESSION:
+        mock_session.request.reset_mock()
 
     return list(plugin.adapter._all_layers.values())
 
 
 @pytest.fixture
-def add_layer(plugin, load_layers) -> Layer:
+def add_layer(plugin, load_layers, mock_session) -> Layer:
     layer: Layer = load_layers[0]
     with mock_response(plugin, "get_points.json"):
         plugin.add_layer(layer.supabase_layer_id)
 
     # needed for QgsTask to process
     pytest_qgis_utils.wait(wait_time_milliseconds=1)
+
+    if MOCK_SESSION:
+        mock_session.request.reset_mock()
 
     return layer
 
@@ -185,7 +191,6 @@ def test_create_sub_layer_3_features(
         )
     )
     monkeypatch.setattr(jakarto_layers_qgis.plugin, "CreateSubLayerDialog", dialog)
-    mock_session.request.reset_mock()
 
     # when
     plugin.create_sub_layer(add_layer.supabase_layer_id)
@@ -242,10 +247,25 @@ def test_merge_sub_layer(plugin, add_layer: Layer, mock_session):
     assert request.json["sub_layer_id"] == sub_layer_id
 
 
+def test_rename_layer(plugin, add_layer: Layer, mock_session, monkeypatch):
+    # given
+    monkeypatch.setattr(QInputDialog, "getText", lambda *a, **kw: ("new_name", True))
+
+    # when
+    plugin.rename_layer(add_layer.supabase_layer_id)
+
+    # then
+    assert mock_session.request.call_count == 1
+    rename_call = mock_session.request.call_args_list[0]
+    request = Request(**rename_call.kwargs)
+    assert request.method == "PATCH"
+    assert request.url == "http://localhost:8000/rest/v1/layers"
+    assert request.params["id"] == f"eq.{add_layer.supabase_layer_id}"
+    assert request.json["name"] == "new_name"
+
+
 def test_add_feature_in_qgis(qgis_iface, plugin, add_layer: Layer, mock_session):
     # given
-    mock_session.request.reset_mock()
-
     qgis_feature = QgsFeature()
     qgis_feature.setGeometry(QgsGeometry.fromPoint(QgsPoint(243778, 5178023, 29)))
     attrs = first_point_attrs(add_layer.attributes)
@@ -262,21 +282,3 @@ def test_add_feature_in_qgis(qgis_iface, plugin, add_layer: Layer, mock_session)
     assert request.method == "POST"
     assert request.url == "http://localhost:8000/rest/v1/points"
     assert request.json["attributes"]["fid"] == 1243
-
-
-def test_rename_layer(plugin, add_layer: Layer, mock_session, monkeypatch):
-    # given
-    mock_session.request.reset_mock()
-    monkeypatch.setattr(QInputDialog, "getText", lambda *a, **kw: ("new_name", True))
-
-    # when
-    plugin.rename_layer(add_layer.supabase_layer_id)
-
-    # then
-    assert mock_session.request.call_count == 1
-    rename_call = mock_session.request.call_args_list[0]
-    request = Request(**rename_call.kwargs)
-    assert request.method == "PATCH"
-    assert request.url == "http://localhost:8000/rest/v1/layers"
-    assert request.params["id"] == f"eq.{add_layer.supabase_layer_id}"
-    assert request.json["name"] == "new_name"
