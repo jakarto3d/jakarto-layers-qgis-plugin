@@ -196,10 +196,9 @@ class Plugin:
 
     def unload(self) -> None:
         """Removes the plugin menu item and icon from QGIS GUI."""
-        if self._adapter:
-            self.adapter.remove_all_layers()
-            self.adapter.stop_realtime()
-        if self._panel:
+        if self._adapter is not None:
+            self.adapter.close()
+        if self._panel is not None:
             self._panel.close()
             self._panel = None
 

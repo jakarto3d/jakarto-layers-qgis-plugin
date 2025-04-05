@@ -7,12 +7,7 @@ import uuid
 from itertools import chain
 from typing import Any, Callable
 
-from qgis.core import (
-    Qgis,
-    QgsFeature,
-    QgsProject,
-    QgsVectorLayer,
-)
+from qgis.core import Qgis, QgsFeature, QgsProject, QgsVectorLayer
 from qgis.gui import QgisInterface
 from qgis.utils import iface
 
@@ -20,6 +15,7 @@ from .constants import anon_key, realtime_url
 from .converters import qgis_layer_to_postgrest_layer, qgis_to_supabase_feature
 from .layer import Layer
 from .logs import log
+from .presence import PresenceManager
 from .qgis_events import QGISDeleteEvent, QGISInsertEvent, QGISUpdateEvent
 from .supabase_events import (
     SupabaseDeleteMessage,
@@ -44,6 +40,7 @@ class Adapter:
         self._postgrest_client = Postgrest(self._session)
         self._realtime: AsyncRealtimeClient | None = None
         self._realtime_thread_event = threading.Event()
+        self._presence_manager = PresenceManager()
 
     def fetch_layers(self) -> None:
         all_layers = {
@@ -336,6 +333,10 @@ class Adapter:
                     )
                     .subscribe()
                 )
+
+                channel = self._realtime.channel("room1")
+                await self._presence_manager.subscribe_channel(channel)
+
                 while not self._realtime_thread_event.is_set():
                     await asyncio.sleep(0.1)
 
@@ -384,6 +385,8 @@ class Adapter:
         self.close()
 
     def close(self) -> None:
+        self.remove_all_layers()
+        self._presence_manager.close()
         self.stop_realtime()
         self._session.close()
 
