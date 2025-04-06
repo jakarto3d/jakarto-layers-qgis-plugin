@@ -3,15 +3,19 @@ from typing import Any
 from PyQt5.QtCore import QObject, pyqtSignal
 from qgis.core import (
     QgsFeature,
+    QgsField,
     QgsGeometry,
     QgsMarkerSymbol,
     QgsPoint,
     QgsProject,
+    QgsProperty,
     QgsSingleSymbolRenderer,
+    QgsSvgMarkerSymbolLayer,
     QgsVectorLayer,
 )
 
-from jakarto_layers_qgis.vendor.realtime._async.client import AsyncRealtimeChannel
+from .constants import RESOURCES_DIR, python_to_qmetatype
+from .vendor.realtime._async.client import AsyncRealtimeChannel
 
 
 class PresenceManager(QObject):
@@ -58,6 +62,7 @@ class PresenceManager(QObject):
                 "x": payload["x"],
                 "y": payload["y"],
                 "srid": payload["srid"],
+                "rotation": payload.get("rotation", 0),
             }
             self.presence_update.emit()
 
@@ -75,12 +80,20 @@ class PresenceManager(QObject):
                 "Point?crs=EPSG:4326&index=yes", "Presence States", "memory"
             )
             # Add fields for presence info
+            self._presence_layer.dataProvider().addAttributes(
+                [QgsField("rotation", python_to_qmetatype["float"])]
+            )
             self._presence_layer.updateFields()
 
-            # Style the layer
-            symbol = QgsMarkerSymbol.createSimple(
-                {"name": "circle", "color": "red", "size": "3"}
-            )
+            # Style the layer with a custom SVG marker
+            symbol = QgsMarkerSymbol()
+            svg_path = str(RESOURCES_DIR / "presence_marker.svg")
+            svg_layer = QgsSvgMarkerSymbolLayer(svg_path)
+            svg_layer.setSize(10)
+            symbol.changeSymbolLayer(0, svg_layer)
+
+            # Set up data-defined rotation
+            symbol.setDataDefinedAngle(QgsProperty.fromField("rotation"))
             renderer = QgsSingleSymbolRenderer(symbol)
             self._presence_layer.setRenderer(renderer)
 
@@ -99,16 +112,16 @@ class PresenceManager(QObject):
 
         features = []
         for state in self._presence_states.values():
-            if not all(k in state for k in ["x", "y", "srid"]):
+            if not all(k in state for k in ["x", "y", "srid", "rotation"]):
                 continue
             feature = QgsFeature()
-            point = QgsPoint(state["x"], state["y"])
-            feature.setGeometry(QgsGeometry.fromPoint(point))
+            feature.setGeometry(QgsGeometry.fromPoint(QgsPoint(state["x"], state["y"])))
+            rotation_deg = -1 * state["rotation"] * 180 / 3.141592
+            feature.setAttributes([rotation_deg])
             features.append(feature)
 
         provider.addFeatures(features)
         self.presence_layer.updateExtents()
-
         self.presence_layer.triggerRepaint()
 
         # not necessary?

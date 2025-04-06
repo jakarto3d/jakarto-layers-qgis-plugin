@@ -1,4 +1,10 @@
+from pathlib import Path
+
 from qgis.PyQt.QtCore import QMetaType
+
+HERE = Path(__file__).parent
+
+RESOURCES_DIR = HERE / "resources"
 
 auth_url = "http://localhost:8000/auth/v1/token"
 postgrest_url = "http://localhost:8000/rest/v1"
