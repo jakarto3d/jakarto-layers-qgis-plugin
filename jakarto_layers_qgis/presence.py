@@ -77,7 +77,7 @@ class PresenceManager(QObject):
     def presence_layer(self):
         if self._presence_layer is None:
             self._presence_layer = QgsVectorLayer(
-                "Point?crs=EPSG:4326&index=yes", "Presence States", "memory"
+                "Point?crs=EPSG:4326&index=yes", "Jakartowns positions", "memory"
             )
             # Add fields for presence info
             self._presence_layer.dataProvider().addAttributes(
