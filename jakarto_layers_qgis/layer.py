@@ -227,6 +227,8 @@ class Layer:
             self.qgis_layer.dataProvider().addFeature(qgis_feature)
             self.add_feature_id(qgis_feature.id(), feature.id)
             self.qgis_layer.updateExtents()
+            # needed to refresh attribute table
+            self.qgis_layer.reload()
         except:
             self.qgis_layer.rollBack()
             raise
