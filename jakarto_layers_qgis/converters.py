@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import date, datetime, time
 from typing import TYPE_CHECKING, Any
 
 from qgis.core import (
@@ -12,12 +13,7 @@ from qgis.core import (
 )
 from qgis.PyQt.QtCore import QDate, QDateTime, QVariant
 
-from .constants import (
-    geometry_types,
-    qmetatype_to_python,
-    type_to_null_value,
-    type_to_type_check,
-)
+from .constants import geometry_types, qmetatype_to_python
 from .supabase_models import LayerAttribute, SupabaseFeature, SupabaseLayer
 
 if TYPE_CHECKING:
@@ -72,10 +68,31 @@ def qgis_to_supabase_feature(
     )
 
 
+def str_convert(value: str | None, python_type: str) -> Any:
+    if value in (None, "None"):
+        return None
+    try:
+        if python_type == "bool":
+            return value.lower() in ["true", "1", "yes", "y"]
+        elif python_type == "int":
+            return int(value)
+        elif python_type == "float":
+            return float(value)
+        elif python_type == "str":
+            return str(value)
+        elif python_type == "date":
+            date.fromisoformat(value)  # typecheck and return the string
+        elif python_type == "time":
+            time.fromisoformat(value)  # typecheck and return the string
+        elif python_type == "datetime":
+            datetime.fromisoformat(value)  # typecheck and return the string
+        return value
+    except (ValueError, TypeError):
+        return None
+
+
 def supabase_attribute_to_qgis_attribute(value, python_type: str):
-    if not value or not type_to_type_check[python_type](value):
-        value = type_to_null_value[python_type]
-    return value
+    return str_convert(value, python_type)
 
 
 def supabase_to_qgis_feature(feature: SupabaseFeature, layer: Layer) -> QgsFeature:
