@@ -237,7 +237,7 @@ class _WebRequestTask(QgsTask):
         return True
 
     def finished(self, result: bool):
-        if result and self._result:
+        if result and self._result is not None:
             self.callback(self._result)
 
 
