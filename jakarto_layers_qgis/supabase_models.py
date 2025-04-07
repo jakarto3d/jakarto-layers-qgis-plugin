@@ -45,6 +45,8 @@ class SupabaseFeature:
             return [self._jsonize_value(v) for v in value]
         elif isinstance(value, (datetime, date)):
             return value.isoformat()
+        elif value is None:
+            return None
         else:
             return str(value)
 

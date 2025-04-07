@@ -12,7 +12,12 @@ from qgis.core import (
 )
 from qgis.PyQt.QtCore import QDate, QDateTime, QVariant
 
-from .constants import geometry_types, qmetatype_to_python
+from .constants import (
+    geometry_types,
+    qmetatype_to_python,
+    type_to_null_value,
+    type_to_type_check,
+)
 from .supabase_models import LayerAttribute, SupabaseFeature, SupabaseLayer
 
 if TYPE_CHECKING:
@@ -67,15 +72,26 @@ def qgis_to_supabase_feature(
     )
 
 
+def supabase_attribute_to_qgis_attribute(value, python_type: str):
+    if not value or not type_to_type_check[python_type](value):
+        value = type_to_null_value[python_type]
+    return value
+
+
 def supabase_to_qgis_feature(feature: SupabaseFeature, layer: Layer) -> QgsFeature:
-    attrs_names = [a.name for a in layer.attributes]
+    name_to_type = {a.name: a.type for a in layer.attributes}
+
+    def get_value(name: str) -> Any:
+        value = feature.attributes.get(name)
+        type_ = name_to_type[name]
+        return supabase_attribute_to_qgis_attribute(value, type_)
+
     if layer.geometry_type == "point":
         x, y, z = feature.geom["coordinates"]
         qgis_feature = QgsFeature()
         qgis_feature.setGeometry(QgsGeometry.fromPoint(QgsPoint(x, y, z)))
-        qgis_feature.setAttributes(
-            [feature.attributes.get(name) for name in attrs_names]
-        )
+        attrs = [get_value(name) for name in name_to_type]
+        qgis_feature.setAttributes(attrs)
     else:
         raise NotImplementedError(
             f"Geometry type {layer.geometry_type} not implemented"

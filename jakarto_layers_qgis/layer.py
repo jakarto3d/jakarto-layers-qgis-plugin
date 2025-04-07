@@ -7,7 +7,7 @@ from qgis.gui import QgisInterface
 from qgis.utils import iface
 
 from .constants import geometry_types, python_to_qmetatype, qmetatype_to_python
-from .converters import supabase_to_qgis_feature
+from .converters import supabase_attribute_to_qgis_attribute, supabase_to_qgis_feature
 from .logs import log
 from .qgis_events import QGISDeleteEvent, QGISInsertEvent, QGISUpdateEvent
 from .supabase_models import LayerAttribute, SupabaseFeature, SupabaseLayer
@@ -253,10 +253,15 @@ class Layer:
 
         self.qgis_layer.startEditing()
 
+        attr_name_to_type = {a.name: a.type for a in self.attributes}
+
         try:
             for attr_name, value in feature.attributes.items():
                 field_idx = self.qgis_layer.fields().indexOf(attr_name)
                 if field_idx >= 0:
+                    value = supabase_attribute_to_qgis_attribute(
+                        value, attr_name_to_type[attr_name]
+                    )
                     qgis_feature.setAttribute(field_idx, value)
             if feature.geom:
                 if feature.geom["type"] != "Point":
@@ -289,8 +294,8 @@ class Layer:
         try:
             # remove from those dicts before deleting the feature
             # to avoid infinite loop when on_event_removed is called
-            self._supabase_id_to_qgis_id.pop(supabase_feature_id)
-            self._qgis_id_to_supabase_id.pop(qgis_id)
+            self._supabase_id_to_qgis_id.pop(supabase_feature_id, None)
+            self._qgis_id_to_supabase_id.pop(qgis_id, None)
             self.qgis_layer.deleteFeature(qgis_id)
             self.qgis_layer.commitChanges()
             self.qgis_layer.updateExtents()
