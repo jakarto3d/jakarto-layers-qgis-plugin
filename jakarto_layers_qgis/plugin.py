@@ -131,6 +131,9 @@ class Plugin:
         self.panel.layerAdd.clicked.connect(self.add_layer)
         self.panel.layerRemove.clicked.connect(self.remove_layer)
         self.panel.layerImport.clicked.connect(self.import_layer)
+        self.panel.jakartownsFollow.toggled.connect(self.adapter.set_jakartowns_follow)
+        self.adapter.has_presence_point.connect(self.panel.jakartownsFollow.setEnabled)
+        self.panel.jakartownsFollow.setEnabled(False)
 
         QgsProject.instance().layersRemoved.connect(self.on_layers_removed)
 

@@ -1,58 +1,71 @@
+from time import time
 from typing import Any
 
 from PyQt5.QtCore import QObject, pyqtSignal
 from qgis.core import (
+    QgsCoordinateReferenceSystem,
+    QgsCoordinateTransform,
     QgsFeature,
     QgsField,
     QgsGeometry,
     QgsMarkerSymbol,
-    QgsPoint,
+    QgsPointXY,
     QgsProject,
     QgsProperty,
     QgsSingleSymbolRenderer,
     QgsSvgMarkerSymbolLayer,
     QgsVectorLayer,
 )
+from qgis.gui import QgisInterface
+from qgis.utils import iface
 
 from .constants import RESOURCES_DIR, python_to_qmetatype
 from .vendor.realtime._async.client import AsyncRealtimeChannel
+
+iface: QgisInterface
+
+PRESENCE_LAYER_SRID = 4326
 
 
 class PresenceManager(QObject):
     """Manages presence states and their visualization in QGIS."""
 
     presence_update = pyqtSignal()  # Signal for presence updates
+    has_presence_point = pyqtSignal(bool)
 
     def __init__(self) -> None:
         super().__init__()
         self._presence_layer: QgsVectorLayer | None = None
         self._presence_states: dict[str, dict[str, Any]] = {}
+        self._last_presence_point: dict[str, tuple[QgsGeometry, float]] = {}
+        self.center_view_on_position_update = False
 
         self.presence_update.connect(self._update_presence_layer)
 
     async def subscribe_channel(self, channel: AsyncRealtimeChannel) -> None:
         def on_presence_join(key, curr_presences, joined_presences):
             for joined in joined_presences:
-                user = joined["user"]
+                user = joined.get("user")
                 if user != "someone@jakarto.com":
                     continue  # change this when permissions are implemented
                 presence_client_id = joined["presence_client_id"]
-                self._presence_states[presence_client_id] = {}
+                self._presence_states.setdefault(presence_client_id, {})
 
         def on_presence_leave(key, curr_presences, left_presences):
             for left in left_presences:
-                user = left["user"]
+                user = left.get("user")
                 if user != "someone@jakarto.com":
                     continue  # change this when permissions are implemented
                 presence_client_id = left["presence_client_id"]
                 self._presence_states.pop(presence_client_id, None)
+                self._last_presence_point.pop(presence_client_id, None)
                 self.presence_update.emit()
 
         def on_position_update(payload):
             if payload.get("event") != "position_update":
                 return
             payload = payload["payload"]
-            user = payload["user"]
+            user = payload.get("user")
             if user != "someone@jakarto.com":
                 return  # change this when permissions are implemented
             presence_client_id = payload["presence_client_id"]
@@ -77,7 +90,9 @@ class PresenceManager(QObject):
     def presence_layer(self):
         if self._presence_layer is None:
             self._presence_layer = QgsVectorLayer(
-                "Point?crs=EPSG:4326&index=yes", "Jakartowns positions", "memory"
+                f"Point?crs=EPSG:{PRESENCE_LAYER_SRID}&index=yes",
+                "Jakartowns positions",
+                "memory",
             )
             # Add fields for presence info
             self._presence_layer.dataProvider().addAttributes(
@@ -111,11 +126,22 @@ class PresenceManager(QObject):
         provider.truncate()
 
         features = []
-        for state in self._presence_states.values():
+        for client_id, state in self._presence_states.items():
             if not all(k in state for k in ["x", "y", "srid", "rotation"]):
                 continue
             feature = QgsFeature()
-            feature.setGeometry(QgsGeometry.fromPoint(QgsPoint(state["x"], state["y"])))
+            point = QgsPointXY(state["x"], state["y"])
+            geom = QgsGeometry.fromPointXY(point)
+            if state["srid"] != PRESENCE_LAYER_SRID:
+                geom.transform(
+                    QgsCoordinateTransform(
+                        QgsCoordinateReferenceSystem(state["srid"]),
+                        QgsCoordinateReferenceSystem(PRESENCE_LAYER_SRID),
+                        QgsProject.instance().transformContext(),
+                    )
+                )
+            self._last_presence_point[client_id] = (geom, time())
+            feature.setGeometry(geom)
             rotation_deg = -1 * state["rotation"] * 180 / 3.141592
             feature.setAttributes([rotation_deg])
             features.append(feature)
@@ -124,13 +150,37 @@ class PresenceManager(QObject):
         self.presence_layer.updateExtents()
         self.presence_layer.triggerRepaint()
 
-        # not necessary?
-        # iface.mapCanvas().refresh()
+        self.has_presence_point.emit(bool(self._last_presence_point))
+        self.center_view_if_active()
+
+    def center_view_if_active(self) -> None:
+        if not self.center_view_on_position_update:
+            return
+        if not bool(self._last_presence_point):
+            return
+        point_geom, _ = max(
+            self._last_presence_point.values(), key=lambda x: x[1]
+        )  # max by time
+
+        # Transform point to map canvas CRS
+        canvas_crs = iface.mapCanvas().mapSettings().destinationCrs()
+        transform_context = QgsProject.instance().transformContext()
+        point_geom.transform(
+            QgsCoordinateTransform(
+                QgsCoordinateReferenceSystem(PRESENCE_LAYER_SRID),
+                canvas_crs,
+                transform_context,
+            )
+        )
+
+        iface.mapCanvas().setCenter(point_geom.asPoint())
+        iface.mapCanvas().refresh()
 
     def close(self) -> None:
         if self._presence_layer is not None:
             try:
                 QgsProject.instance().removeMapLayer(self._presence_layer)
+                iface.mapCanvas().refresh()
             except RuntimeError:
                 pass
             self._presence_layer = None

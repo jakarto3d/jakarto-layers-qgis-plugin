@@ -7,6 +7,7 @@ import uuid
 from itertools import chain
 from typing import Any, Callable
 
+from PyQt5.QtCore import pyqtBoundSignal
 from qgis.core import Qgis, QgsFeature, QgsProject, QgsVectorLayer
 from qgis.gui import QgisInterface
 from qgis.utils import iface
@@ -120,6 +121,14 @@ class Adapter:
         if layer is None:
             return False
         return layer.supabase_layer_id in self._loaded_layers
+
+    @property
+    def has_presence_point(self) -> pyqtBoundSignal:
+        return self._presence_manager.has_presence_point
+
+    def set_jakartowns_follow(self, value: bool) -> None:
+        self._presence_manager.center_view_on_position_update = value
+        self._presence_manager.center_view_if_active()
 
     def all_layer_properties(self):
         """For display in the layer tree."""

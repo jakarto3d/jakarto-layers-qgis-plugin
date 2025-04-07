@@ -26,6 +26,7 @@ class MainPanel(QDockWidget, FORM_CLASS):
         self.layerAdd: QPushButton
         self.layerRemove: QPushButton
         self.layerImport: QPushButton
+        self.jakartownsFollow: QPushButton
 
         self.layerTree.setItemDelegate(MinHeightDelegate(24))
 
