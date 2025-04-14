@@ -7,7 +7,7 @@ import uuid
 from itertools import chain
 from typing import Any, Callable
 
-from PyQt5.QtCore import pyqtBoundSignal
+from PyQt5.QtCore import QObject, pyqtBoundSignal, pyqtSignal
 from qgis.core import Qgis, QgsFeature, QgsProject, QgsVectorLayer
 from qgis.gui import QgisInterface
 from qgis.utils import iface
@@ -32,8 +32,11 @@ from .vendor.realtime import AsyncRealtimeClient
 iface: QgisInterface
 
 
-class Adapter:
+class Adapter(QObject):
+    realtime_event_received = pyqtSignal(dict)  # Signal for realtime events
+
     def __init__(self) -> None:
+        super().__init__()
         self._loaded_layers: dict[str, Layer] = {}
         self._qgis_id_to_supabase_id: dict[str, str] = {}
         self._all_layers: dict[str, Layer] = {}
@@ -42,6 +45,9 @@ class Adapter:
         self._realtime: AsyncRealtimeClient | None = None
         self._realtime_thread_event = threading.Event()
         self._presence_manager = PresenceManager()
+
+        # Connect the signal to the handler
+        self.realtime_event_received.connect(self.on_supabase_realtime_event)
 
     def fetch_layers(self) -> None:
         all_layers = {
@@ -338,7 +344,7 @@ class Adapter:
                     .on_postgres_changes(
                         "*",
                         table="points",
-                        callback=self.on_supabase_realtime_event,
+                        callback=self.realtime_event_received.emit,
                     )
                     .subscribe()
                 )
@@ -362,6 +368,7 @@ class Adapter:
     def on_supabase_realtime_event(
         self, event_data: dict, only_print_errors: bool = True
     ) -> None:
+        """Handle realtime events in the main thread."""
         try:
             message = parse_message(event_data)
             if message is None:
