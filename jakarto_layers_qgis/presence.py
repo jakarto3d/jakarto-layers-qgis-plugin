@@ -20,7 +20,7 @@ from qgis.gui import QgisInterface
 from qgis.utils import iface
 
 from .constants import RESOURCES_DIR, python_to_qmetatype
-from .vendor.realtime._async.client import AsyncRealtimeChannel
+from .vendor.realtime import AsyncRealtimeChannel
 
 iface: QgisInterface
 
