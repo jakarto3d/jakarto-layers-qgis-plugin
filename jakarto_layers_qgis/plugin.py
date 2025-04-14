@@ -118,6 +118,7 @@ class Plugin:
         self.toolbar = iface.addToolBar("Jakarto Layers")
         self.toolbar.setObjectName("JakartoLayers")
 
+        self.panel.layerTree.setExpandsOnDoubleClick(False)
         self.panel.layerTree.itemSelectionChanged.connect(
             self.on_item_selection_changed
         )
