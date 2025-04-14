@@ -145,6 +145,8 @@ class Plugin:
         )
         self.toolbar.addAction(action)
 
+        self.remove_all_presence_layers()
+
     def show_layer_context_menu(self, position):
         item = self.panel.layerTree.itemAt(position)
         if item is None:
@@ -217,6 +219,15 @@ class Plugin:
 
         self.reload_layers()
         self.adapter.start_realtime()
+
+    def remove_all_presence_layers(self) -> None:
+        to_remove = []
+        for layer in QgsProject.instance().mapLayers().values():
+            if layer.customProperty("jakarto_positions_presence_layer", None) == "1":
+                to_remove.append(layer.id())
+        if to_remove:
+            QgsProject.instance().removeMapLayers(to_remove)
+            iface.mapCanvas().refresh()
 
     def reload_layers(self, fetch_layers: bool = True) -> None:
         if fetch_layers:

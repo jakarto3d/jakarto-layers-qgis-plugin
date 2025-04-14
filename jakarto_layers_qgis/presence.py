@@ -94,6 +94,9 @@ class PresenceManager(QObject):
                 "Jakartowns positions",
                 "memory",
             )
+            self._presence_layer.setCustomProperty(
+                "jakarto_positions_presence_layer", "1"
+            )
             # Add fields for presence info
             self._presence_layer.dataProvider().addAttributes(
                 [QgsField("rotation", python_to_qmetatype["float"])]
