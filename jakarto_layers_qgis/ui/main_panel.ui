@@ -195,8 +195,11 @@ QPushButton:checked {
         <pointsize>10</pointsize>
        </font>
       </property>
+      <property name="styleSheet">
+       <string notr="true">QTreeView { qproperty-indentation: 20; }</string>
+      </property>
       <property name="indentation">
-       <number>15</number>
+       <number>20</number>
       </property>
       <attribute name="headerVisible">
        <bool>false</bool>
