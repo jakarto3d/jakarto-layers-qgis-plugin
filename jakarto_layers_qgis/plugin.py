@@ -314,7 +314,7 @@ class Plugin:
             layer_node = tree_root.findLayer(layer.qgis_layer.id())
             if layer_node is not None:
                 icons_folder = HERE / "ui" / "icons"
-                icon = QIcon(str(icons_folder / "cloud-lightning-regular-36.png"))
+                icon = QIcon(str(icons_folder / "jakartowns-black.png"))
                 ind = QgsLayerTreeViewIndicator(layer_node)
                 ind.setIcon(icon)
                 is_sub = layer.supabase_parent_layer_id is not None
