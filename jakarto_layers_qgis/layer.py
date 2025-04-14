@@ -4,7 +4,6 @@ from typing import Any, Callable, Iterable
 
 from qgis.core import QgsFeature, QgsField, QgsGeometry, QgsPoint, QgsVectorLayer
 from qgis.gui import QgisInterface
-from qgis.utils import iface
 
 from .constants import geometry_types, python_to_qmetatype, qmetatype_to_python
 from .converters import supabase_attribute_to_qgis_attribute, supabase_to_qgis_feature
@@ -221,21 +220,12 @@ class Layer:
 
         log(f"Supabase InsertMessage: {feature.id}")
 
-        self.qgis_layer.startEditing()
-        try:
-            qgis_feature = supabase_to_qgis_feature(feature, self)
-            self.qgis_layer.dataProvider().addFeature(qgis_feature)
-            self.add_feature_id(qgis_feature.id(), feature.id)
-            self.qgis_layer.updateExtents()
-            # needed to refresh attribute table
-            self.qgis_layer.reload()
-        except:
-            self.qgis_layer.rollBack()
-            raise
-        finally:
-            if hasattr(iface, "vectorLayerTools"):
-                # iface has no vectorLayerTools in tests
-                iface.vectorLayerTools().stopEditing(self.qgis_layer)
+        qgis_feature = supabase_to_qgis_feature(feature, self)
+        self.qgis_layer.dataProvider().addFeature(qgis_feature)
+        self.add_feature_id(qgis_feature.id(), feature.id)
+        self.qgis_layer.triggerRepaint()
+        # needed to refresh attribute table
+        self.qgis_layer.reload()
 
     def on_realtime_update(self, feature: SupabaseFeature) -> None:
         """Called when an update message is received from the realtime server."""
@@ -253,35 +243,36 @@ class Layer:
         if qgis_feature is None:
             return
 
-        self.qgis_layer.startEditing()
-
         attr_name_to_type = {a.name: a.type for a in self.attributes}
 
-        try:
-            for attr_name, value in feature.attributes.items():
-                field_idx = self.qgis_layer.fields().indexOf(attr_name)
-                if field_idx >= 0:
-                    value = supabase_attribute_to_qgis_attribute(
-                        value, attr_name_to_type[attr_name]
-                    )
-                    qgis_feature.setAttribute(field_idx, value)
-            if feature.geom:
-                if feature.geom["type"] != "Point":
-                    raise ValueError(
-                        f"Geometry type {feature.geom['type']} not implemented"
-                    )
-                x, y, z = feature.geom["coordinates"]
-                qgis_feature.setGeometry(QgsGeometry.fromPoint(QgsPoint(x, y, z)))
+        change_attributes = {}
+        change_geometry = None
 
-            self.qgis_layer.updateFeature(qgis_feature)
-            self.qgis_layer.commitChanges()
-        except:
-            self.qgis_layer.rollBack()
-            raise
-        finally:
-            if hasattr(iface, "vectorLayerTools"):
-                # iface has no vectorLayerTools in tests
-                iface.vectorLayerTools().stopEditing(self.qgis_layer)
+        for attr_name, value in feature.attributes.items():
+            field_idx = self.qgis_layer.fields().indexOf(attr_name)
+            if field_idx >= 0:
+                value = supabase_attribute_to_qgis_attribute(
+                    value, attr_name_to_type[attr_name]
+                )
+                change_attributes[field_idx] = value
+        if feature.geom:
+            if feature.geom["type"] != "Point":
+                raise ValueError(
+                    f"Geometry type {feature.geom['type']} not implemented"
+                )
+            x, y, z = feature.geom["coordinates"]
+            change_geometry = QgsGeometry.fromPoint(QgsPoint(x, y, z))
+
+        if change_attributes:
+            self.qgis_layer.dataProvider().changeAttributeValues(
+                {qgis_id: change_attributes}
+            )
+        if change_geometry:
+            self.qgis_layer.dataProvider().changeGeometryValues(
+                {qgis_id: change_geometry}
+            )
+        self.qgis_layer.triggerRepaint()
+        self.qgis_layer.reload()
 
     def on_realtime_delete(self, supabase_feature_id: str) -> bool:
         """Called when a delete message is received from the realtime server."""
@@ -291,25 +282,18 @@ class Layer:
 
         log(f"Supabase DeleteMessage: {supabase_feature_id}")
 
-        self.qgis_layer.startEditing()
-
         try:
             # remove from those dicts before deleting the feature
             # to avoid infinite loop when on_event_removed is called
             self._supabase_id_to_qgis_id.pop(supabase_feature_id, None)
             self._qgis_id_to_supabase_id.pop(qgis_id, None)
-            self.qgis_layer.deleteFeature(qgis_id)
-            self.qgis_layer.commitChanges()
-            self.qgis_layer.updateExtents()
+            self.qgis_layer.dataProvider().deleteFeatures([qgis_id])
+            self.qgis_layer.triggerRepaint()
+            self.qgis_layer.reload()
         except:
-            self.qgis_layer.rollBack()
             # restore the dicts
             self._supabase_id_to_qgis_id[supabase_feature_id] = qgis_id
             self._qgis_id_to_supabase_id[qgis_id] = supabase_feature_id
             raise
-        finally:
-            if hasattr(iface, "vectorLayerTools"):
-                # iface has no vectorLayerTools in tests
-                iface.vectorLayerTools().stopEditing(self.qgis_layer)
 
         return True
