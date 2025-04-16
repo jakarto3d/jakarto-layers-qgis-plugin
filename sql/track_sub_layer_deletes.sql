@@ -10,5 +10,6 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Create the trigger
-DROP TRIGGER IF EXISTS track_sub_layer_deletes_trigger ON points;
-CREATE TRIGGER track_sub_layer_deletes_trigger BEFORE DELETE ON points FOR EACH ROW EXECUTE FUNCTION track_sub_layer_deletes();
+CREATE OR REPLACE TRIGGER track_sub_layer_deletes_trigger
+BEFORE DELETE ON points
+FOR EACH ROW EXECUTE FUNCTION track_sub_layer_deletes();

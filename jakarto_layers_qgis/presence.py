@@ -45,29 +45,20 @@ class PresenceManager(QObject):
     async def subscribe_channel(self, channel: AsyncRealtimeChannel) -> None:
         def on_presence_join(key, curr_presences, joined_presences):
             for joined in joined_presences:
-                user = joined.get("user")
-                if user != "someone@jakarto.com":
-                    continue  # change this when permissions are implemented
                 presence_client_id = joined["presence_client_id"]
                 self._presence_states.setdefault(presence_client_id, {})
 
         def on_presence_leave(key, curr_presences, left_presences):
             for left in left_presences:
-                user = left.get("user")
-                if user != "someone@jakarto.com":
-                    continue  # change this when permissions are implemented
                 presence_client_id = left["presence_client_id"]
                 self._presence_states.pop(presence_client_id, None)
                 self._last_presence_point.pop(presence_client_id, None)
                 self.presence_update.emit()
 
         def on_position_update(payload):
-            if payload.get("event") != "position_update":
+            if payload.get("event") != "jakartowns_position":
                 return
             payload = payload["payload"]
-            user = payload.get("user")
-            if user != "someone@jakarto.com":
-                return  # change this when permissions are implemented
             presence_client_id = payload["presence_client_id"]
             if not all(k in payload for k in ["x", "y", "srid"]):
                 return
@@ -82,7 +73,7 @@ class PresenceManager(QObject):
         await (
             channel.on_presence_join(callback=on_presence_join)
             .on_presence_leave(callback=on_presence_leave)
-            .on_broadcast("position_update", callback=on_position_update)
+            .on_broadcast("jakartowns_position", callback=on_position_update)
             .subscribe()
         )
 

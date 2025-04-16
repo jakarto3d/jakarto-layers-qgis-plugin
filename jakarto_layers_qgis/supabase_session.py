@@ -13,8 +13,9 @@ class SupabaseSession:
     _session_max_age = 5 * 60
 
     def __init__(self) -> None:
-        self._access_token = None
-        self._refresh_token = None
+        self._user_id: str | None = None
+        self._access_token: str | None = None
+        self._refresh_token: str | None = None
         self._token_expires_at_timestamp: int | None = None
         self._session: requests.Session | None = None
         self._session_time = time.time()
@@ -41,6 +42,13 @@ class SupabaseSession:
         self.session  # refresh token if needed
         return self._access_token
 
+    @property
+    def user_id(self) -> str:
+        self.session  # refresh token if needed
+        if not self._user_id:
+            raise ValueError("Could not get user ID")
+        return self._user_id
+
     def _get_token(self) -> None:
         if not self._refresh_token:
             json_data = {"email": "someone@jakarto.com", "password": "password"}
@@ -57,6 +65,7 @@ class SupabaseSession:
         )
         response.raise_for_status()
         data = response.json()
+        self._user_id = data["user"]["id"]
         self._access_token = data["access_token"]
         self._refresh_token = data["refresh_token"]
         self._token_expires_at_timestamp = data["expires_at"]

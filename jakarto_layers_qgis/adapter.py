@@ -153,6 +153,10 @@ class Adapter(QObject):
             parent_id = layer.supabase_parent_layer_id
             if parent_id is None:
                 continue
+            if parent_id not in layers_data:
+                # we don't have permissions to see the parent layer
+                layer.supabase_parent_layer_id = None
+                continue
             layers_data[parent_id][4].append(layers_data[layer_id])
         # third pass to get top-level layers
         top_layers = [
@@ -349,7 +353,18 @@ class Adapter(QObject):
                     .subscribe()
                 )
 
-                channel = self._realtime.channel("room1")
+                channel = self._realtime.channel(
+                    # this channel is private, only the user with the same id can subscribe to it
+                    # this is configured in the realtime.messages table's RLS policies
+                    f"jakartowns_positions_{self._session.user_id}",
+                    params={
+                        "config": {
+                            "broadcast": {"ack": False, "self": False},
+                            "presence": {"key": str(uuid.uuid4())},
+                            "private": True,
+                        }
+                    },
+                )
                 await self._presence_manager.subscribe_channel(channel)
 
                 while not self._realtime_thread_event.is_set():

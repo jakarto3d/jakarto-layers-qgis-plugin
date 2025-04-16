@@ -42,6 +42,11 @@ BEGIN
             SELECT sld.parent_feature_id
             FROM sub_layer_deletes sld
             WHERE sld.sub_layer_id = merge_sub_layer.sub_layer_id
+        )
+        AND p.id NOT IN (
+            SELECT p2.parent_id
+            FROM points p2
+            WHERE p2.layer_id = sub_layer_id
         );
 
     -- Delete the points in the sub-layer

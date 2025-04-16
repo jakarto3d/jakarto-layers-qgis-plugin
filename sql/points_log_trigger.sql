@@ -1,6 +1,8 @@
 -- Create the trigger function
 CREATE OR REPLACE FUNCTION log_points_changes()
-RETURNS trigger AS $$
+RETURNS trigger
+SECURITY DEFINER
+AS $$
 BEGIN
     CASE TG_OP
         WHEN 'INSERT' THEN
