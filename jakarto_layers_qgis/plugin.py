@@ -18,6 +18,7 @@ from qgis.PyQt.QtWidgets import (
 )
 from qgis.utils import iface
 
+from . import auth
 from .adapter import Adapter
 from .ui.create_sub_layer import CreateSubLayerDialog
 from .ui.main_panel import MainPanel
@@ -215,7 +216,13 @@ class Plugin:
         for action in self.actions:
             iface.removePluginMenu(Plugin.name, action)
 
+    def setup_auth(self) -> bool:
+        return auth.setup_auth(check_function=self.adapter.setup_auth)
+
     def run(self) -> None:
+        if not self.setup_auth():
+            return
+
         iface.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.panel)
 
         self.reload_layers()

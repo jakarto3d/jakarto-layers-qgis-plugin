@@ -295,6 +295,10 @@ class Adapter(QObject):
             callback=_sub_callback,
         )
 
+    def setup_auth(self, email: str, password: str) -> bool:
+        """This is meant to be called when the plugin is needed (on action click for example)."""
+        return self._session.setup_auth(email, password)
+
     def remove_layer(self, supabase_id: str | None) -> bool:
         if not (layer := self.get_layer(supabase_id)):
             return False
