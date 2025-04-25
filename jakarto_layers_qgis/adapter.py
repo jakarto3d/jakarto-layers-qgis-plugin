@@ -8,12 +8,17 @@ from itertools import chain
 from typing import Any, Callable
 
 from PyQt5.QtCore import QObject, pyqtBoundSignal, pyqtSignal
-from qgis.core import Qgis, QgsFeature, QgsProject, QgsVectorLayer
+from qgis.core import (
+    Qgis,
+    QgsFeature,
+    QgsProject,
+    QgsVectorLayer,
+)
 from qgis.gui import QgisInterface
 from qgis.utils import iface
 
 from .constants import anon_key, realtime_url
-from .converters import qgis_layer_to_postgrest_layer, qgis_to_supabase_feature
+from .converters import qgis_layer_to_supabase_layer, qgis_to_supabase_feature
 from .layer import Layer
 from .logs import log
 from .presence import PresenceManager
@@ -38,7 +43,7 @@ class Adapter(QObject):
     def __init__(self) -> None:
         super().__init__()
         self._loaded_layers: dict[str, Layer] = {}
-        self._qgis_id_to_supabase_id: dict[str, str] = {}
+        self._qgis_layer_id_to_supabase_id: dict[str, str] = {}
         self._all_layers: dict[str, Layer] = {}
         self._session = SupabaseSession()
         self._postgrest_client = Postgrest(self._session)
@@ -136,11 +141,15 @@ class Adapter(QObject):
         self._presence_manager.center_view_on_position_update = value
         self._presence_manager.center_view_if_active()
 
-    def all_layer_properties(self):
+    def all_layer_properties(self, with_temporary: bool = False) -> list[tuple]:
         """For display in the layer tree."""
+        all_layers = self._all_layers.copy()
+        if not with_temporary:
+            all_layers = {k: v for k, v in all_layers.items() if not v.temporary}
+
         layers_data = {}
         # first pass to get all layers
-        for layer_id, layer in self._all_layers.items():
+        for layer_id, layer in all_layers.items():
             layers_data[layer_id] = (
                 layer.name,
                 layer.geometry_type,
@@ -149,7 +158,7 @@ class Adapter(QObject):
                 [],
             )
         # second pass to get parent-child relationships
-        for layer_id, layer in self._all_layers.items():
+        for layer_id, layer in all_layers.items():
             parent_id = layer.supabase_parent_layer_id
             if parent_id is None:
                 continue
@@ -162,7 +171,7 @@ class Adapter(QObject):
         top_layers = [
             layer_data
             for layer_id, layer_data in layers_data.items()
-            if self._all_layers[layer_id].supabase_parent_layer_id is None
+            if all_layers[layer_id].supabase_parent_layer_id is None
         ]
         return top_layers
 
@@ -175,11 +184,12 @@ class Adapter(QObject):
 
     def _supabase_layer_from_qgis_features(
         self,
-        layer: QgsVectorLayer,
-        features: list[QgsFeature],
+        qgis_layer: QgsVectorLayer,
+        qgis_features: list[QgsFeature],
         *,
         layer_name: str | None = None,
         parent_layer: Layer | None = None,
+        temporary_layer: bool = False,
     ) -> tuple[SupabaseLayer, list[SupabaseFeature]]:
         """Create a new supabase layer from a list of qgis features.
 
@@ -194,7 +204,7 @@ class Adapter(QObject):
         """
         # get the srid from the layer
         # must correspond with supported crs in jakproj
-        srid = layer.crs().authid()
+        srid = qgis_layer.crs().authid()
         try:
             srid = int(srid.split(":")[-1])
         except Exception:
@@ -220,16 +230,20 @@ class Adapter(QObject):
         # request = QgsFeatureRequest().setDestinationCrs(target_crs, context)
         # features = list(layer.getFeatures(request))
         supabase_layer_id = str(uuid.uuid4())
-        postgrest_layer = qgis_layer_to_postgrest_layer(
-            layer, supabase_layer_id, srid=srid, layer_name=layer_name
+        supabase_layer: SupabaseLayer = qgis_layer_to_supabase_layer(
+            qgis_layer,
+            supabase_layer_id,
+            srid=srid,
+            layer_name=layer_name,
+            temporary_layer=temporary_layer,
         )
 
         supabase_features = []
-        feature_type = layer.geometryType().name  # type: ignore
-        attribute_names = [a.name() for a in layer.fields()]
-        for feature in features:
+        feature_type = qgis_layer.geometryType().name  # type: ignore
+        attribute_names = [a.name() for a in qgis_layer.fields()]
+        for qgis_feature in qgis_features:
             supabase_feature = qgis_to_supabase_feature(
-                feature,
+                qgis_feature,
                 supabase_layer_id=supabase_layer_id,
                 feature_type=feature_type,
                 attribute_names=attribute_names,
@@ -237,38 +251,95 @@ class Adapter(QObject):
             if parent_layer is not None:
                 # set the parent id for the supabase feature (for sub-layers)
                 supabase_feature.parent_id = parent_layer.get_supabase_feature_id(
-                    feature.id()
+                    qgis_feature.id()
                 )
             supabase_features.append(supabase_feature)
 
         if parent_layer is not None:
             # set the parent id for the supabase layer (for sub-layers)
-            postgrest_layer.parent_id = parent_layer.supabase_layer_id
+            supabase_layer.parent_id = parent_layer.supabase_layer_id
 
-        return postgrest_layer, supabase_features
+        return supabase_layer, supabase_features
 
-    def import_layer(self, layer: QgsVectorLayer) -> None:
-        features = [f for f in layer.getFeatures() if not f.geometry().isNull()]
+    def import_layer(
+        self, qgis_layer: QgsVectorLayer, temporary_layer: bool = False
+    ) -> tuple[Layer, list[tuple[int, str]]]:
+        qgis_features = [
+            f for f in qgis_layer.getFeatures() if not f.geometry().isNull()
+        ]
 
-        postgrest_layer, supabase_features = self._supabase_layer_from_qgis_features(
-            layer, features
+        supabase_layer, supabase_features = self._supabase_layer_from_qgis_features(
+            qgis_layer,
+            qgis_features,
+            temporary_layer=temporary_layer,
         )
+        qgis_feature_id_to_supabase_feature_id = [
+            (qgis_feature.id(), supabase_feature.id)
+            for qgis_feature, supabase_feature in zip(qgis_features, supabase_features)
+        ]
 
-        self._postgrest_client.create_layer(postgrest_layer)
+        self._postgrest_client.create_layer(supabase_layer)
         if supabase_features:
             self._postgrest_client.add_features(supabase_features)
-        self._all_layers[postgrest_layer.id] = Layer.from_supabase_layer(
-            postgrest_layer,
+
+        layer = Layer.from_supabase_layer(
+            supabase_layer,
             self._commit_callback,
+            qgis_layer=qgis_layer if temporary_layer else None,
         )
 
-        iface.messageBar().pushMessage(
-            "Jakarto layers",
-            f"Imported {len(supabase_features)} features "
-            f"to '{postgrest_layer.name}' layer",
-            level=Qgis.MessageLevel.Success,
-            duration=5,
+        self._all_layers[supabase_layer.id] = layer
+
+        if not temporary_layer:
+            iface.messageBar().pushMessage(
+                "Jakarto layers",
+                f"Imported {len(supabase_features)} features "
+                f"to '{supabase_layer.name}' layer",
+                level=Qgis.MessageLevel.Success,
+                duration=5,
+            )
+
+        return layer, qgis_feature_id_to_supabase_feature_id
+
+    def sync_layer_with_jakartowns(self, qgis_layer: QgsVectorLayer) -> Layer:
+        self.unsync_layer_with_jakartowns(qgis_layer)
+
+        layer: Layer
+        qgis_feature_id_to_supabase_feature_id: list[tuple[int, str]]
+        layer, qgis_feature_id_to_supabase_feature_id = self.import_layer(
+            qgis_layer, temporary_layer=True
         )
+
+        qgis_layer.setCustomProperty(
+            "jakarto_sync_with_jakartowns", layer.supabase_layer_id
+        )
+
+        self._all_layers[layer.supabase_layer_id] = layer
+        self._loaded_layers[layer.supabase_layer_id] = layer
+        self._qgis_layer_id_to_supabase_id[layer.qgis_layer.id()] = (
+            layer.supabase_layer_id
+        )
+
+        for qgis_id, supabase_id in qgis_feature_id_to_supabase_feature_id:
+            layer.add_feature_id(qgis_id, supabase_id)
+
+        self.start_realtime()
+
+        return layer
+
+    def unsync_layer_with_jakartowns(self, qgis_layer: QgsVectorLayer) -> bool:
+        supabase_id = qgis_layer.customProperty("jakarto_sync_with_jakartowns", None)
+        if supabase_id is None:
+            return False
+        layer = self._all_layers.get(supabase_id)
+        self._loaded_layers.pop(supabase_id, None)
+        self._all_layers.pop(supabase_id, None)
+        if layer is not None:
+            layer.disconnect_all_signals()
+            layer.set_layer_tree_icon(False)
+        self._postgrest_client.drop_layer(supabase_id)
+        qgis_layer.removeCustomProperty("jakarto_sync_with_jakartowns")
+        return True
 
     def add_layer(
         self, supabase_id: str | None, callback: Callable[[bool], Any]
@@ -284,7 +355,7 @@ class Adapter(QObject):
             layer.add_features_on_load(features)
             QgsProject.instance().addMapLayer(layer.qgis_layer, addToLegend=True)
             self._loaded_layers[layer.supabase_layer_id] = layer
-            self._qgis_id_to_supabase_id[layer.qgis_layer.id()] = (
+            self._qgis_layer_id_to_supabase_id[layer.qgis_layer.id()] = (
                 layer.supabase_layer_id
             )
             callback(True)
@@ -304,31 +375,31 @@ class Adapter(QObject):
             return False
         if layer.supabase_layer_id not in self._loaded_layers:
             return False
-        # this will trigger the on_layers_removed signal
-        QgsProject.instance().removeMapLayer(layer.qgis_layer)
+        if layer.temporary:
+            layer.set_layer_tree_icon(False)
+        else:
+            # this will trigger the on_layers_removed signal
+            QgsProject.instance().removeMapLayer(layer.qgis_layer)
+
         return True
 
-    def drop_layer(self, supabase_id: str | None) -> bool:
-        if not (layer := self.get_layer(supabase_id)):
-            return False
-        if layer.supabase_layer_id not in self._all_layers:
-            return False
-        self.remove_layer(layer.supabase_layer_id)
-        self._postgrest_client.drop_layer(layer.supabase_layer_id)
-        self._all_layers.pop(layer.supabase_layer_id, None)
+    def drop_layer(self, supabase_id: str) -> bool:
+        self.remove_layer(supabase_id)
+        self._postgrest_client.drop_layer(supabase_id)
+        self._all_layers.pop(supabase_id, None)
         return True
 
     def on_layers_removed(self, qgis_ids: list[str]) -> bool:
         """Called when layers are removed from the map (not by the plugin)."""
         removed = False
         for qgis_id in qgis_ids:
-            if qgis_id not in self._qgis_id_to_supabase_id:
+            if qgis_id not in self._qgis_layer_id_to_supabase_id:
                 continue
-            supabase_id = self._qgis_id_to_supabase_id[qgis_id]
+            supabase_id = self._qgis_layer_id_to_supabase_id[qgis_id]
             layer = self._loaded_layers[supabase_id]
             layer.reset()
             self._loaded_layers.pop(supabase_id, None)
-            self._qgis_id_to_supabase_id.pop(qgis_id, None)
+            self._qgis_layer_id_to_supabase_id.pop(qgis_id, None)
             removed = True
 
         return removed
@@ -339,7 +410,7 @@ class Adapter(QObject):
                 self.remove_layer(supabase_id)
             iface.mapCanvas().refresh()
             self._loaded_layers.clear()
-            self._qgis_id_to_supabase_id.clear()
+            self._qgis_layer_id_to_supabase_id.clear()
 
     def start_realtime(self) -> None:
         def _thread_func() -> None:
@@ -380,9 +451,10 @@ class Adapter(QObject):
                 if not self._realtime_thread_event.is_set():
                     raise
 
-        self._realtime_thread_event = threading.Event()
-        thread = threading.Thread(target=_thread_func, daemon=True)
-        thread.start()
+        if self._realtime is None:
+            self._realtime_thread_event = threading.Event()
+            thread = threading.Thread(target=_thread_func, daemon=True)
+            thread.start()
 
     def on_supabase_realtime_event(
         self, event_data: dict, only_print_errors: bool = True
@@ -450,6 +522,7 @@ class Adapter(QObject):
             selected_features,
             layer_name=new_layer_name,
             parent_layer=parent_layer,
+            temporary_layer=False,
         )
 
         self._postgrest_client.create_layer(postgrest_layer)

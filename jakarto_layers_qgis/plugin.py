@@ -3,8 +3,17 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Callable
 
-from qgis.core import Qgis, QgsProject
-from qgis.gui import QgisInterface, QgsLayerTreeViewIndicator
+from PyQt5.QtCore import QUrl
+from PyQt5.QtGui import QDesktopServices
+from qgis.core import (
+    Qgis,
+    QgsCoordinateReferenceSystem,
+    QgsCoordinateTransform,
+    QgsGeometry,
+    QgsMapLayer,
+    QgsProject,
+)
+from qgis.gui import QgisInterface
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import (
@@ -20,6 +29,7 @@ from qgis.utils import iface
 
 from . import auth
 from .adapter import Adapter
+from .layer import Layer
 from .ui.create_sub_layer import CreateSubLayerDialog
 from .ui.main_panel import MainPanel
 
@@ -38,6 +48,9 @@ class Plugin:
         self.menu = Plugin.name
         self.toolbar = None
         self._panel = None
+
+        self._show_layers_action = None
+        self._sync_layer_action = None
 
         self._adapter = None
 
@@ -138,16 +151,43 @@ class Plugin:
         self.panel.jakartownsFollow.setEnabled(False)
 
         QgsProject.instance().layersRemoved.connect(self.on_layers_removed)
+        iface.currentLayerChanged.connect(self.on_current_layer_changed)
 
-        action = self.add_action(
+        self._show_layers_action = self.add_action(
             ":/resources/icons/layer-solid-36.png",
             text="Jakarto Layers",
-            callback=self.run,
+            callback=self.show_layers_list,
             parent=iface.mainWindow(),
         )
-        self.toolbar.addAction(action)
+        self._sync_layer_action = self.add_action(
+            ":/resources/icons/jakartowns-sync-36.png",
+            text="Sync layer with Jakartowns",
+            callback=self.sync_layer_with_jakartowns,
+            parent=iface.mainWindow(),
+        )
+        self.on_current_layer_changed()
+        self.toolbar.addAction(self._show_layers_action)
+        self.toolbar.addAction(self._sync_layer_action)
 
         self.remove_all_presence_layers()
+
+        if hasattr(iface, "projectRead"):
+            # this is not available in tests
+            iface.projectRead.connect(self.remove_all_presence_layers)
+
+    def is_layer_syncable(self, layer: QgsMapLayer) -> bool:
+        return (
+            layer is not None
+            and hasattr(layer, "geometryType")
+            and layer.geometryType() == Qgis.GeometryType.Point
+        )
+
+    def on_current_layer_changed(self, layer: QgsMapLayer | None = None) -> None:
+        if layer is None:
+            layer = iface.activeLayer()
+        syncable = self.is_layer_syncable(layer)
+        if self._sync_layer_action is not None:
+            self._sync_layer_action.setEnabled(syncable)
 
     def show_layer_context_menu(self, position):
         item = self.panel.layerTree.itemAt(position)
@@ -219,7 +259,41 @@ class Plugin:
     def setup_auth(self) -> bool:
         return auth.setup_auth(check_function=self.adapter.setup_auth)
 
-    def run(self) -> None:
+    def sync_layer_with_jakartowns(self) -> None:
+        if not self.setup_auth():
+            return
+
+        qgis_layer = iface.activeLayer()
+        if not self.is_layer_syncable(qgis_layer):
+            return
+
+        if self.adapter.unsync_layer_with_jakartowns(qgis_layer):
+            return  # layer was already synced with jakartowns, we just unsynced it
+
+        layer: Layer = self.adapter.sync_layer_with_jakartowns(qgis_layer)
+
+        def _get_center_4326() -> tuple[float, float]:
+            center: QgsGeometry = QgsGeometry.fromPointXY(
+                iface.mapCanvas().extent().center()
+            )
+            canvas_crs = iface.mapCanvas().mapSettings().destinationCrs()
+            center.transform(
+                QgsCoordinateTransform(
+                    canvas_crs,
+                    QgsCoordinateReferenceSystem("EPSG:4326"),
+                    QgsProject.instance().transformContext(),
+                )
+            )
+            pt = center.asPoint()
+            return pt.x(), pt.y()
+
+        lng, lat = _get_center_4326()
+        url = f"http://127.0.0.1:5173/?real_time_layer={layer.supabase_layer_id}&lat={lat}&lng={lng}"
+        QDesktopServices.openUrl(QUrl(url))
+
+        layer.set_layer_tree_icon(True)
+
+    def show_layers_list(self) -> None:
         if not self.setup_auth():
             return
 
@@ -248,7 +322,7 @@ class Plugin:
             srid,
             supabase_layer_id,
             children,
-        ) in self.adapter.all_layer_properties():
+        ) in self.adapter.all_layer_properties(with_temporary=False):
             item = QTreeWidgetItem()
             item.setText(0, name)
             if children:
@@ -318,23 +392,7 @@ class Plugin:
             if layer is None:
                 return
             iface.setActiveLayer(layer.qgis_layer)
-            tree_root = QgsProject.instance().layerTreeRoot()
-            layer_node = tree_root.findLayer(layer.qgis_layer.id())
-            if layer_node is not None:
-                icons_folder = HERE / "ui" / "icons"
-                icon = QIcon(str(icons_folder / "jakartowns-black.png"))
-                ind = QgsLayerTreeViewIndicator(layer_node)
-                ind.setIcon(icon)
-                is_sub = layer.supabase_parent_layer_id is not None
-                name = "Layer" if not is_sub else "Sub-Layer"
-                ind.setToolTip(f"Jakarto Real-time {name}")
-
-                # remove all indicators, add the new one
-                if hasattr(iface, "layerTreeView"):  # no iface.layerTreeView in tests
-                    tree_view = iface.layerTreeView()
-                    for indicator in tree_view.indicators(layer_node):
-                        tree_view.removeIndicator(layer_node, indicator)
-                    tree_view.addIndicator(layer_node, ind)
+            layer.set_layer_tree_icon(True)
 
         self.adapter.add_layer(supabase_id, _sub_callback)
 

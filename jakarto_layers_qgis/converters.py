@@ -134,22 +134,23 @@ def geom_force3d(geom: dict[str, Any]) -> dict[str, Any]:
     return geom
 
 
-def qgis_layer_to_postgrest_layer(
-    layer: QgsVectorLayer,
+def qgis_layer_to_supabase_layer(
+    qgis_layer: QgsVectorLayer,
     supabase_layer_id: str | None = None,
     *,
     layer_name: str | None = None,
     srid: int,
     parent_id: str | None = None,
+    temporary_layer: bool = False,
 ) -> SupabaseLayer:
-    if layer.geometryType() != Qgis.GeometryType.Point:
+    if qgis_layer.geometryType() != Qgis.GeometryType.Point:
         raise ValueError("Only point layers are supported")
 
     if supabase_layer_id is None:
         supabase_layer_id = str(uuid.uuid4())
 
     if layer_name is None:
-        layer_name = layer.name()
+        layer_name = qgis_layer.name()
 
     return SupabaseLayer(
         id=supabase_layer_id,
@@ -157,8 +158,9 @@ def qgis_layer_to_postgrest_layer(
         geometry_type="point",
         attributes=[
             LayerAttribute(name=a.name(), type=qmetatype_to_python[a.type()])
-            for a in layer.fields()
+            for a in qgis_layer.fields()
         ],
         srid=srid,
         parent_id=parent_id,
+        temporary=temporary_layer,
     )

@@ -76,6 +76,7 @@ class SupabaseLayer:
     attributes: list[LayerAttribute]
     srid: int
     parent_id: str | None = None
+    temporary: bool = False
 
     def to_json(self) -> dict[str, Any]:
         return asdict(self)

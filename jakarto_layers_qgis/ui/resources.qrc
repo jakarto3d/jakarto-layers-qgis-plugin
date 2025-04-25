@@ -1,5 +1,7 @@
 <RCC>
   <qresource prefix="resources">
+    <file>icons/jakartowns-sync-black-36.png</file>
+    <file>icons/jakartowns-sync-36.png</file>
     <file>icons/layer-plus-solid-36.png</file>
     <file>icons/layer-minus-regular-36.png</file>
     <file>icons/layer-solid-36.png</file>
