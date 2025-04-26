@@ -396,8 +396,8 @@ class Adapter(QObject):
             if qgis_id not in self._qgis_layer_id_to_supabase_id:
                 continue
             supabase_id = self._qgis_layer_id_to_supabase_id[qgis_id]
-            layer = self._loaded_layers[supabase_id]
-            layer.reset()
+            if layer := self._loaded_layers.get(supabase_id):
+                layer.reset()
             self._loaded_layers.pop(supabase_id, None)
             self._qgis_layer_id_to_supabase_id.pop(qgis_id, None)
             removed = True
