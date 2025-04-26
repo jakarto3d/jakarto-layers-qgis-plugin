@@ -29,6 +29,7 @@ from qgis.utils import iface
 
 from . import auth
 from .adapter import Adapter
+from .constants import jakartowns_url
 from .layer import Layer
 from .ui.create_sub_layer import CreateSubLayerDialog
 from .ui.main_panel import MainPanel
@@ -288,7 +289,7 @@ class Plugin:
             return pt.x(), pt.y()
 
         lng, lat = _get_center_4326()
-        url = f"http://127.0.0.1:5173/?real_time_layer={layer.supabase_layer_id}&lat={lat}&lng={lng}"
+        url = f"{jakartowns_url}/?real_time_layer={layer.supabase_layer_id}&lat={lat}&lng={lng}"
         QDesktopServices.openUrl(QUrl(url))
 
         layer.set_layer_tree_icon(True)

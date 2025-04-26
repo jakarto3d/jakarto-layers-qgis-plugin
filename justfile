@@ -30,10 +30,15 @@ format:
     .venv/bin/ruff check --fix
     .venv/bin/pre-commit run --all-files
 
-# Run QGIS with the plugin folder set to the current directory
+# Run QGIS with QGIS_PLUGINPATH=$(pwd)
 [linux]
 run-qgis:
     JAKARTO_LAYERS_VERBOSE=1 QGIS_PLUGINPATH=$(pwd) qgis &
+
+# Run QGIS with QGIS_PLUGINPATH=$(pwd) using a local supabase instance
+[linux]
+run-qgis-local-supabase:
+    JAKARTO_SUPABASE_LOCAL=1 just run-qgis
 
 # Install dependencies in the `jakarto_layers_qgis_plugin/vendor` folder
 vendorize:

@@ -10,6 +10,7 @@ from .constants import (
     anon_key,
     geometry_types,
     postgrest_url,
+    verify_ssl,
 )
 from .supabase_models import LayerAttribute, SupabaseFeature, SupabaseLayer
 from .supabase_session import SupabaseSession
@@ -195,6 +196,7 @@ class Postgrest:
                 "apiKey": anon_key,
             },
             "timeout": timeout,
+            "verify": verify_ssl,
         }
         if callback is None:
             response = self._session.request(**args)

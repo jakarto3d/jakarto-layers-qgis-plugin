@@ -5,7 +5,7 @@ import time
 
 import requests
 
-from .constants import anon_key, auth_url
+from .constants import anon_key, auth_url, verify_ssl
 
 
 class SupabaseSession:
@@ -85,6 +85,7 @@ class SupabaseSession:
                     json=json_data,
                     params=params,
                     headers={"apiKey": anon_key},
+                    verify=verify_ssl,
                 )
                 response.raise_for_status()
                 data = response.json()

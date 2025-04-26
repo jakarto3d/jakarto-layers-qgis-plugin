@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from qgis.PyQt.QtCore import QMetaType
@@ -6,17 +7,42 @@ HERE = Path(__file__).parent
 
 RESOURCES_DIR = HERE / "resources"
 
-auth_url = "http://localhost:8000/auth/v1/token"
-postgrest_url = "http://localhost:8000/rest/v1"
-realtime_url = "ws://localhost:8000/realtime/v1"
+# prod variables
+auth_url = "https://supabase.jakarto.com/auth/v1/token"
+postgrest_url = "https://supabase.jakarto.com/rest/v1"
+realtime_url = "wss://supabase.jakarto.com/realtime/v1"
+jakartowns_url = "https://maps.jakarto.com"
 anon_key = (
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
-    "eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgI"
-    "CJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgIC"
-    "AiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHA"
-    "iOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zs"
-    "iyj_I_OZ2T9FtRU2BBNWN8Bu4GE"
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiY"
+    "XNlLWRlbW8iLCJpYXQiOjE2NDE3NjkyMDAsImV4cCI6MTc5OTUzNTYwMH0.AhccFnQokMqgFJr"
+    "etk5dXp1oAtzTbD5ocvuP1Ap-rzM"
 )
+verify_ssl = os.getenv("JAKARTO_VERIFY_SSL", "true").lower() == "true"
+
+if os.getenv("JAKARTO_SUPABASE_LOCAL"):
+    auth_url = "http://localhost:8000/auth/v1/token"
+    postgrest_url = "http://localhost:8000/rest/v1"
+    realtime_url = "ws://localhost:8000/realtime/v1"
+    jakartowns_url = "http://localhost:5173"
+    anon_key = (
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgI"
+        "CJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHA"
+        "iOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE"
+    )
+
+
+if not verify_ssl:
+    # disable ssl verification for the realtime client
+    import ssl
+
+    from .vendor.realtime._async import client
+
+    def patched_connect(*args, **kwargs):
+        return real_connect(*args, **kwargs, ssl=ssl._create_unverified_context())
+
+    real_connect = client.connect
+    client.connect = patched_connect
+
 
 geometry_types = {
     "point": "Point",
