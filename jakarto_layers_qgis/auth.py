@@ -105,6 +105,10 @@ def get_credentials_from_settings() -> tuple[str | None, str | None]:
     settings = QSettings("Jakarto", "JakartoPlugin")
     username = settings.value("jakartowns/username")
     password = settings.value("jakartowns/password")
+    if isinstance(username, bytes):
+        username = username.decode()
+    if isinstance(password, bytes):
+        password = password.decode()
     if username and password:
         return username, password
     return None, None
@@ -141,7 +145,13 @@ def _get_credentials_from_auth_database() -> tuple[str | None, str | None]:
         config = QgsAuthMethodConfig()
         if auth_mgr.loadAuthenticationConfig(authcfg, config, True):
             if config.isValid():
-                return config.config("username"), config.config("password")
+                username = config.config("username")
+                password = config.config("password")
+                if isinstance(username, bytes):
+                    username = username.decode()
+                if isinstance(password, bytes):
+                    password = password.decode()
+                return username, password
     return None, None
 
 
