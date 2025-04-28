@@ -186,7 +186,7 @@ class Postgrest:
             url = f"{postgrest_url}/{table_name}"
         else:
             url = f"{postgrest_url}/rpc/{rpc}"
-        args = {
+        kwargs = {
             "method": method,
             "url": url,
             "params": params,
@@ -199,13 +199,13 @@ class Postgrest:
             "verify": verify_ssl,
         }
         if callback is None:
-            response = self._session.request(**args)
+            response = self._session.request(**kwargs)
             _raise_for_status(response)
             return response
 
         task = _WebRequestTask(
             description=f"Fetching features from {table_name}",
-            args=args,
+            args=kwargs,
             raise_for_status=_raise_for_status,
             callback=callback,
         )
