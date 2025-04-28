@@ -89,6 +89,7 @@ class Layer:
     @property
     def qgis_layer(self) -> QgsVectorLayer:
         if self._qgis_layer is None:
+            self._qgis_layer_signals_initialized = False
             # create the layer
             self._qgis_layer = QgsVectorLayer(
                 f"{geometry_types[self.geometry_type]}?crs=EPSG:{self.supabase_srid}&index=yes",
@@ -169,6 +170,7 @@ class Layer:
     def reset(self) -> None:
         self._reset_edits()
         self._qgis_layer = None
+        self._qgis_layer_signals_initialized = False
 
     def add_features_on_load(self, features: list[SupabaseFeature]) -> None:
         """Called on the first load of the layer."""
