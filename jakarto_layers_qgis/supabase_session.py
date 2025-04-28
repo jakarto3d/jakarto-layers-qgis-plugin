@@ -95,6 +95,11 @@ class SupabaseSession:
                 self._token_expires_at_timestamp = data["expires_at"]
                 return True
             except requests.RequestException as e:
+                if e.response is not None and 400 <= e.response.status_code < 500:
+                    print(f"Error when getting token: {e.response.text}")
+                    attempt = max_retries  # don't retry on invalid credentials
+                else:
+                    print(f"Unexpected error when getting token: {e}")
                 last_exception = e
                 if attempt < max_retries - 1:
                     time.sleep(retry_delay)
