@@ -11,7 +11,6 @@ RESOURCES_DIR = HERE / "resources"
 auth_url = "https://supabase.jakarto.com/auth/v1/token"
 postgrest_url = "https://supabase.jakarto.com/rest/v1"
 realtime_url = "wss://supabase.jakarto.com/realtime/v1"
-jakartowns_url = "https://maps.jakarto.com"
 anon_key = (
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiY"
     "XNlLWRlbW8iLCJpYXQiOjE2NDE3NjkyMDAsImV4cCI6MTc5OTUzNTYwMH0.AhccFnQokMqgFJr"
@@ -19,11 +18,12 @@ anon_key = (
 )
 verify_ssl = os.getenv("JAKARTO_VERIFY_SSL", "true").lower() == "true"
 
-if os.getenv("JAKARTO_SUPABASE_LOCAL"):
+jakartowns_url = os.getenv("JAKARTO_LAYERS_JAKARTOWNS_URL", "https://maps.jakarto.com")
+
+if os.getenv("JAKARTO_LAYERS_SUPABASE_LOCAL"):
     auth_url = "http://localhost:8000/auth/v1/token"
     postgrest_url = "http://localhost:8000/rest/v1"
     realtime_url = "ws://localhost:8000/realtime/v1"
-    jakartowns_url = "http://localhost:5173"
     anon_key = (
         "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgI"
         "CJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHA"

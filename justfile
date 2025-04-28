@@ -38,7 +38,7 @@ run-qgis:
 # Run QGIS with QGIS_PLUGINPATH=$(pwd) using a local supabase instance
 [linux]
 run-qgis-local-supabase:
-    JAKARTO_SUPABASE_LOCAL=1 just run-qgis
+    JAKARTO_LAYERS_SUPABASE_LOCAL=1 just run-qgis
 
 # Install dependencies in the `jakarto_layers_qgis_plugin/vendor` folder
 vendorize:
