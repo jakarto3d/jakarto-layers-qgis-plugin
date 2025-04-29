@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional
 
-from realtime.types import RealtimeChannelOptions
+from jakarto_layers_qgis.vendor.realtime.types import RealtimeChannelOptions
 
 if TYPE_CHECKING:
     from .client import SyncRealtimeClient

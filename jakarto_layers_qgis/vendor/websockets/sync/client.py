@@ -154,7 +154,7 @@ def connect(
 
     :func:`connect` may be used as a context manager::
 
-        from websockets.sync.client import connect
+        from jakarto_layers_qgis.vendor.websockets.sync.client import connect
 
         with connect(...) as websocket:
             ...

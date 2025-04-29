@@ -381,7 +381,7 @@ def serve(
     that it will be closed and call :meth:`~Server.serve_forever` to serve
     requests::
 
-        from websockets.sync.server import serve
+        from jakarto_layers_qgis.vendor.websockets.sync.server import serve
 
         def handler(websocket):
             ...
@@ -648,7 +648,7 @@ def basic_auth(
 
     :func:`basic_auth` is designed to integrate with :func:`serve` as follows::
 
-        from websockets.sync.server import basic_auth, serve
+        from jakarto_layers_qgis.vendor.websockets.sync.server import basic_auth, serve
 
         with serve(
             ...,

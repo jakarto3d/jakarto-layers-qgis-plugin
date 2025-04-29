@@ -9,8 +9,8 @@ from math import floor
 from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import urlencode, urlparse, urlunparse
 
-import websockets
-from websockets.asyncio.client import ClientConnection, connect
+from jakarto_layers_qgis.vendor import websockets
+from jakarto_layers_qgis.vendor.websockets.asyncio.client import ClientConnection, connect
 
 from ..message import Message
 from ..transformers import http_endpoint_url

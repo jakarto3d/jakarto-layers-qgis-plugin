@@ -420,7 +420,7 @@ class tzfile(_tzinfo):
 
     .. testsetup:: tzfile
 
-        from dateutil.tz import gettz
+        from jakarto_layers_qgis.vendor.dateutil.tz import gettz
         from datetime import datetime
 
     .. doctest:: tzfile
@@ -928,7 +928,7 @@ class tzrange(tzrangebase):
 
     .. testsetup:: tzrange
 
-        from dateutil.tz import tzrange, tzstr
+        from jakarto_layers_qgis.vendor.dateutil.tz import tzrange, tzstr
 
     .. doctest:: tzrange
 
@@ -951,7 +951,7 @@ class tzrange(tzrangebase):
                  start=None, end=None):
 
         global relativedelta
-        from dateutil import relativedelta
+        from jakarto_layers_qgis.vendor.dateutil import relativedelta
 
         self._std_abbr = stdabbr
         self._dst_abbr = dstabbr
@@ -1078,7 +1078,7 @@ class tzstr(tzrange):
     """
     def __init__(self, s, posix_offset=False):
         global parser
-        from dateutil.parser import _parser as parser
+        from jakarto_layers_qgis.vendor.dateutil.parser import _parser as parser
 
         self._s = s
 
@@ -1109,7 +1109,7 @@ class tzstr(tzrange):
         self.hasdst = bool(self._start_delta)
 
     def _delta(self, x, isend=0):
-        from dateutil import relativedelta
+        from jakarto_layers_qgis.vendor.dateutil import relativedelta
         kwargs = {}
         if x.month is not None:
             kwargs["month"] = x.month
@@ -1263,7 +1263,7 @@ class tzical(object):
     """
     def __init__(self, fileobj):
         global rrule
-        from dateutil import rrule
+        from jakarto_layers_qgis.vendor.dateutil import rrule
 
         if isinstance(fileobj, string_types):
             self._s = fileobj
@@ -1651,7 +1651,7 @@ def __get_gettz():
                                 tz = None
 
                         if not tz:
-                            from dateutil.zoneinfo import get_zonefile_instance
+                            from jakarto_layers_qgis.vendor.dateutil.zoneinfo import get_zonefile_instance
                             tz = get_zonefile_instance().get(name)
 
                         if not tz:

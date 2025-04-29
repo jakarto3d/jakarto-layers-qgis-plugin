@@ -5,7 +5,7 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
-from realtime.types import (
+from jakarto_layers_qgis.vendor.realtime.types import (
     Binding,
     Callback,
     ChannelEvents,

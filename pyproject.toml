@@ -26,3 +26,15 @@ exclude_lines = [
     "pass",
     "raise ImportError"
 ]
+
+[tool.vendoring]
+destination = "jakarto_layers_qgis/vendor"
+requirements = "requirements-vendor.txt"
+namespace = "jakarto_layers_qgis.vendor"
+
+[tool.vendoring.transformations]
+drop = [
+    "*.dist-info",
+    "*.egg-info",
+    "websockets/speedups*",
+]

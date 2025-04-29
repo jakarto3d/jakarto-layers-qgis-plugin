@@ -42,9 +42,7 @@ run-qgis-local-supabase:
 
 # Install dependencies in the `jakarto_layers_qgis_plugin/vendor` folder
 vendorize:
-    . .venv/bin/activate \
-    && pip install --platform none --upgrade --no-deps --target jakarto_layers_qgis/vendor -r requirements-vendor.txt \
-    && rm -rf jakarto_layers_qgis/vendor/*.dist-info
+    . .venv/bin/activate && vendoring sync
 
 # Compile the resources.qrc file (only necessary when it changed)
 compile:

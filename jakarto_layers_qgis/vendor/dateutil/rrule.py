@@ -539,7 +539,7 @@ class rrule(rrulebase):
         # byeaster
         if byeaster is not None:
             if not easter:
-                from dateutil import easter
+                from jakarto_layers_qgis.vendor.dateutil import easter
             if isinstance(byeaster, integer_types):
                 self._byeaster = (byeaster,)
             else:
@@ -1493,7 +1493,7 @@ class _rrulestr(object):
     def _handle_UNTIL(self, rrkwargs, name, value, **kwargs):
         global parser
         if not parser:
-            from dateutil import parser
+            from jakarto_layers_qgis.vendor.dateutil import parser
         try:
             rrkwargs["until"] = parser.parse(value,
                                              ignoretz=kwargs.get("ignoretz"),
@@ -1562,7 +1562,7 @@ class _rrulestr(object):
                           ignoretz, tzids, tzinfos):
         global parser
         if not parser:
-            from dateutil import parser
+            from jakarto_layers_qgis.vendor.dateutil import parser
 
         datevals = []
         value_found = False
@@ -1699,7 +1699,7 @@ class _rrulestr(object):
             if (forceset or len(rrulevals) > 1 or rdatevals
                     or exrulevals or exdatevals):
                 if not parser and (rdatevals or exdatevals):
-                    from dateutil import parser
+                    from jakarto_layers_qgis.vendor.dateutil import parser
                 rset = rruleset(cache=cache)
                 for value in rrulevals:
                     rset.rrule(self._parse_rfc_rrule(value, dtstart=dtstart,

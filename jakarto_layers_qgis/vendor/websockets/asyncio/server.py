@@ -576,7 +576,7 @@ class serve:
     :class:`asyncio.Server`. Treat it as an asynchronous context manager to
     ensure that the server will be closed::
 
-        from websockets.asyncio.server import serve
+        from jakarto_layers_qgis.vendor.websockets.asyncio.server import serve
 
         def handler(websocket):
             ...
@@ -875,7 +875,7 @@ def basic_auth(
 
     :func:`basic_auth` is designed to integrate with :func:`serve` as follows::
 
-        from websockets.asyncio.server import basic_auth, serve
+        from jakarto_layers_qgis.vendor.websockets.asyncio.server import basic_auth, serve
 
         async with serve(
             ...,

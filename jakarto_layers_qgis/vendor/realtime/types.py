@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Any, Callable, Dict, List, Literal, Optional, TypedDict, TypeVar
 
-from typing_extensions import ParamSpec
+from jakarto_layers_qgis.vendor.typing_extensions import ParamSpec
 
 # Constants
 DEFAULT_TIMEOUT = 10

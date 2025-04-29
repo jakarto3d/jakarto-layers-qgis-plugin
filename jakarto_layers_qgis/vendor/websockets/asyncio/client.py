@@ -171,7 +171,7 @@ class connect:
 
     :func:`connect` may be used as an asynchronous context manager::
 
-        from websockets.asyncio.client import connect
+        from jakarto_layers_qgis.vendor.websockets.asyncio.client import connect
 
         async with connect(...) as websocket:
             ...

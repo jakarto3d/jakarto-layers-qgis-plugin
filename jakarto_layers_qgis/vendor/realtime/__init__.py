@@ -3,7 +3,7 @@ import logging
 # Configure the root logger for the module
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
-from realtime.version import __version__
+from jakarto_layers_qgis.vendor.realtime.version import __version__
 
 from ._async.channel import AsyncRealtimeChannel
 from ._async.client import AsyncRealtimeClient
