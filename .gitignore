@@ -15,3 +15,5 @@ symbology-style.db
 user-history.db
 
 .coverage
+
+jakarto_layers_qgis/vendor/
