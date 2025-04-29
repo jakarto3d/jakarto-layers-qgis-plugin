@@ -8,9 +8,10 @@ HERE = Path(__file__).parent
 RESOURCES_DIR = HERE / "resources"
 
 # prod variables
-auth_url = "https://supabase.jakarto.com/auth/v1/token"
-postgrest_url = "https://supabase.jakarto.com/rest/v1"
-realtime_url = "wss://supabase.jakarto.com/realtime/v1"
+supabase_url = "https://supabase.jakarto.com"
+auth_url = f"{supabase_url}/auth/v1/token"
+postgrest_url = f"{supabase_url}/rest/v1"
+realtime_url = f"{supabase_url.replace('https', 'wss')}/realtime/v1"
 anon_key = (
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiY"
     "XNlLWRlbW8iLCJpYXQiOjE2NDE3NjkyMDAsImV4cCI6MTc5OTUzNTYwMH0.AhccFnQokMqgFJr"
@@ -21,9 +22,10 @@ verify_ssl = os.getenv("JAKARTO_VERIFY_SSL", "true").lower() == "true"
 jakartowns_url = os.getenv("JAKARTO_LAYERS_JAKARTOWNS_URL", "https://maps.jakarto.com")
 
 if os.getenv("JAKARTO_LAYERS_SUPABASE_LOCAL"):
-    auth_url = "http://localhost:8000/auth/v1/token"
-    postgrest_url = "http://localhost:8000/rest/v1"
-    realtime_url = "ws://localhost:8000/realtime/v1"
+    supabase_url = "http://localhost:8000"
+    auth_url = f"{supabase_url}/auth/v1/token"
+    postgrest_url = f"{supabase_url}/rest/v1"
+    realtime_url = f"{supabase_url.replace('http', 'ws')}/realtime/v1"
     anon_key = (
         "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgI"
         "CJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHA"

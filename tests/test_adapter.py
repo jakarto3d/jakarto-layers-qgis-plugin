@@ -19,6 +19,7 @@ from qgis.PyQt.QtWidgets import QAction, QDialog, QInputDialog, QMenu, QMessageB
 
 import jakarto_layers_qgis.plugin
 from jakarto_layers_qgis import supabase_postgrest
+from jakarto_layers_qgis.constants import supabase_url
 from jakarto_layers_qgis.layer import Layer
 from jakarto_layers_qgis.supabase_models import LayerAttribute
 from jakarto_layers_qgis.supabase_session import SupabaseSession
@@ -38,6 +39,7 @@ class Request:
     json: dict = field(default_factory=dict)
     headers: dict = field(default_factory=dict)
     timeout: int = field(default=5)
+    verify: bool = field(default=True)
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -225,14 +227,14 @@ def test_create_sub_layer_3_features(
     layer_post = mock_session.request.call_args_list[0]
     request = Request(**layer_post.kwargs)
     assert request.method == "POST"
-    assert request.url == "http://localhost:8000/rest/v1/layers"
+    assert request.url == f"{supabase_url}/rest/v1/layers"
     assert request.json["name"] == "test_sub_layer"
     assert request.json["parent_id"] == add_layer.supabase_layer_id
 
     points_post = mock_session.request.call_args_list[1]
     request = Request(**points_post.kwargs)
     assert request.method == "POST"
-    assert request.url == "http://localhost:8000/rest/v1/points"
+    assert request.url == f"{supabase_url}/rest/v1/points"
     assert request.json[0]["layer_id"] == sub_layer_id
     assert len(request.json) == 3
 
@@ -256,7 +258,7 @@ def test_merge_sub_layer(plugin, add_layer: Layer, mock_session):
     merge_call = mock_session.request.call_args_list[0]
     request = Request(**merge_call.kwargs)
     assert request.method == "POST"
-    assert request.url == "http://localhost:8000/rest/v1/rpc/merge_sub_layer"
+    assert request.url == f"{supabase_url}/rest/v1/rpc/merge_sub_layer"
     assert request.json["sub_layer_id"] == sub_layer_id
 
 
@@ -272,7 +274,7 @@ def test_rename_layer(plugin, add_layer: Layer, mock_session, monkeypatch):
     rename_call = mock_session.request.call_args_list[0]
     request = Request(**rename_call.kwargs)
     assert request.method == "PATCH"
-    assert request.url == "http://localhost:8000/rest/v1/layers"
+    assert request.url == f"{supabase_url}/rest/v1/layers"
     assert request.params["id"] == f"eq.{add_layer.supabase_layer_id}"
     assert request.json["name"] == "new_name"
 
@@ -293,7 +295,7 @@ def test_add_feature_in_qgis(add_layer: Layer, mock_session):
     add_call = mock_session.request.call_args_list[0]
     request = Request(**add_call.kwargs)
     assert request.method == "POST"
-    assert request.url == "http://localhost:8000/rest/v1/points"
+    assert request.url == f"{supabase_url}/rest/v1/points"
     assert request.json["attributes"]["fid"] == 1243
 
 
@@ -312,7 +314,7 @@ def test_update_feature_in_qgis(add_layer: Layer, mock_session):
     update_call = mock_session.request.call_args_list[0]
     request = Request(**update_call.kwargs)
     assert request.method == "PATCH"
-    assert request.url == "http://localhost:8000/rest/v1/points"
+    assert request.url == f"{supabase_url}/rest/v1/points"
     assert request.json["attributes"]["fid"] == 1111
 
 
@@ -331,7 +333,7 @@ def test_delete_feature_in_qgis(add_layer: Layer, mock_session):
     delete_call = mock_session.request.call_args_list[0]
     request = Request(**delete_call.kwargs)
     assert request.method == "DELETE"
-    assert request.url == "http://localhost:8000/rest/v1/points"
+    assert request.url == f"{supabase_url}/rest/v1/points"
     assert request.params["id"] == f"eq.{supabase_id}"
 
 
@@ -349,7 +351,7 @@ def test_add_attribute_in_qgis(add_layer: Layer, mock_session):
     add_call = mock_session.request.call_args_list[0]
     request = Request(**add_call.kwargs)
     assert request.method == "PATCH"
-    assert request.url == "http://localhost:8000/rest/v1/layers"
+    assert request.url == f"{supabase_url}/rest/v1/layers"
     assert request.params["id"] == f"eq.{add_layer.supabase_layer_id}"
     assert request.json["attributes"] == attribs
 
@@ -368,7 +370,7 @@ def test_remove_attribute_in_qgis(add_layer: Layer, mock_session):
     remove_call = mock_session.request.call_args_list[0]
     request = Request(**remove_call.kwargs)
     assert request.method == "PATCH"
-    assert request.url == "http://localhost:8000/rest/v1/layers"
+    assert request.url == f"{supabase_url}/rest/v1/layers"
     assert request.params["id"] == f"eq.{add_layer.supabase_layer_id}"
     assert request.json["attributes"] == attribs
 
@@ -451,13 +453,13 @@ def test_import_layer(plugin, clear_layers, mock_session):
     layer_call = mock_session.request.call_args_list[0]
     request = Request(**layer_call.kwargs)
     assert request.method == "POST"
-    assert request.url == "http://localhost:8000/rest/v1/layers"
+    assert request.url == f"{supabase_url}/rest/v1/layers"
     assert request.json["name"] == "road_signs_sample"
 
     points_call = mock_session.request.call_args_list[1]
     request = Request(**points_call.kwargs)
     assert request.method == "POST"
-    assert request.url == "http://localhost:8000/rest/v1/points"
+    assert request.url == f"{supabase_url}/rest/v1/points"
     assert len(request.json) == 9
     assert request.json[0]["attributes"]["fid"] == 1243
 
@@ -473,7 +475,7 @@ def test_drop_layer(plugin, add_layer: Layer, mock_session):
     drop_call = mock_session.request.call_args_list[0]
     request = Request(**drop_call.kwargs)
     assert request.method == "DELETE"
-    assert request.url == "http://localhost:8000/rest/v1/layers"
+    assert request.url == f"{supabase_url}/rest/v1/layers"
     assert request.params["id"] == f"eq.{add_layer.supabase_layer_id}"
 
 
