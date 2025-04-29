@@ -4,9 +4,9 @@ repos:
     rev: v5.0.0
     hooks:
       - id: trailing-whitespace
-        exclude: ^jakarto_layers_qgis/vendor/
+        exclude: ^jakarto_layers_qgis/vendor/|.*\.patch$
       - id: end-of-file-fixer
-        exclude: ^jakarto_layers_qgis/vendor/
+        exclude: ^jakarto_layers_qgis/vendor/|.*\.patch$
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.11.2
     hooks:

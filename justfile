@@ -11,6 +11,9 @@ venv:
     uv pip install -r requirements-dev.txt
     .venv/bin/pre-commit install
 
+    echo "Downloading vendor dependencies..."
+    just vendorize
+
     echo "Activate the venv with: "
     echo ". .venv/bin/activate"
 
@@ -42,6 +45,7 @@ run-qgis-local-supabase:
 
 # Install dependencies in the `jakarto_layers_qgis_plugin/vendor` folder
 vendorize:
+    #!/usr/bin/env bash
     . .venv/bin/activate && vendoring sync
 
 # Compile the resources.qrc file (only necessary when it changed)

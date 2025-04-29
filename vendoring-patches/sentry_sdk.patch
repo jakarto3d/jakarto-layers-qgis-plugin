@@ -1,0 +1,63 @@
+--- a/jakarto_layers_qgis/vendor/sentry_sdk/spotlight.py	2025-04-29 11:17:51.404151517 -0400
++++ b/jakarto_layers_qgis/vendor/sentry_sdk/spotlight.py	2025-04-29 11:18:58.062795965 -0400
+@@ -97,9 +97,9 @@
+             # type: (Self, Callable[..., HttpResponse]) -> None
+             super().__init__(get_response)
+ 
+-            import sentry_sdk.api
++            import jakarto_layers_qgis.vendor.sentry_sdk.api
+ 
+-            self.sentry_sdk = sentry_sdk.api
++            self.sentry_sdk = jakarto_layers_qgis.vendor.sentry_sdk.api
+ 
+             spotlight_client = self.sentry_sdk.get_client().spotlight
+             if spotlight_client is None:
+--- a/jakarto_layers_qgis/vendor/sentry_sdk/ai/monitoring.py	2025-04-29 11:26:54.955409562 -0400
++++ b/jakarto_layers_qgis/vendor/sentry_sdk/ai/monitoring.py	2025-04-29 11:26:57.889437949 -0400
+@@ -1,7 +1,7 @@
+ import inspect
+ from functools import wraps
+ 
+-import sentry_sdk.utils
++import jakarto_layers_qgis.vendor.sentry_sdk.utils
+ from sentry_sdk import start_span
+ from sentry_sdk.tracing import Span
+ from sentry_sdk.utils import ContextVar
+@@ -46,7 +46,7 @@
+                     try:
+                         res = f(*args, **kwargs)
+                     except Exception as e:
+-                        event, hint = sentry_sdk.utils.event_from_exception(
++                        event, hint = jakarto_layers_qgis.vendor.sentry_sdk.utils.event_from_exception(
+                             e,
+                             client_options=sentry_sdk.get_client().options,
+                             mechanism={"type": "ai_monitoring", "handled": False},
+@@ -75,7 +75,7 @@
+                     try:
+                         res = await f(*args, **kwargs)
+                     except Exception as e:
+-                        event, hint = sentry_sdk.utils.event_from_exception(
++                        event, hint = jakarto_layers_qgis.vendor.sentry_sdk.utils.event_from_exception(
+                             e,
+                             client_options=sentry_sdk.get_client().options,
+                             mechanism={"type": "ai_monitoring", "handled": False},
+--- a/jakarto_layers_qgis/vendor/sentry_sdk/_init_implementation.py	2025-04-29 11:30:00.000000000 -0400
++++ b/jakarto_layers_qgis/vendor/sentry_sdk/_init_implementation.py	2025-04-29 11:30:00.000000000 -0400
+@@ -7,7 +7,7 @@
+ if TYPE_CHECKING:
+     from typing import Any, ContextManager, Optional
+ 
+-    import sentry_sdk.consts
++    import jakarto_layers_qgis.vendor.sentry_sdk.consts
+ 
+ 
+ class _InitGuard:
+--- a/jakarto_layers_qgis/vendor/sentry_sdk/scope.py	2025-04-29 11:30:00.000000000 -0400
++++ b/jakarto_layers_qgis/vendor/sentry_sdk/scope.py	2025-04-29 11:30:00.000000000 -0400
+@@ -1802,5 +1802,5 @@
+ # Circular imports
+ from sentry_sdk.client import NonRecordingClient
+ 
+ if TYPE_CHECKING:
+-    import sentry_sdk.client
++    import jakarto_layers_qgis.vendor.sentry_sdk.client

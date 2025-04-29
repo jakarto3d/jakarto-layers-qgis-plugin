@@ -32,6 +32,8 @@ destination = "jakarto_layers_qgis/vendor"
 requirements = "requirements-vendor.txt"
 namespace = "jakarto_layers_qgis.vendor"
 
+patches-dir = "vendoring-patches"
+
 [tool.vendoring.transformations]
 drop = [
     "*.dist-info",
