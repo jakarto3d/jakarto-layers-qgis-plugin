@@ -1,15 +1,14 @@
-# Jakarto layers QGIS Plugin
+# Jakarto Real-Time Layers QGIS Plugin
 
-Prototype to view and edit Jakarto layers in QGIS.
-
+Prototype to view and edit Jakarto Real-Time Layers in QGIS.
 
 ## Concept
 
-Les "layers Jakarto" sont des couches de géométries vectorielles stockées sur le serveur de Jakarto.
+"Jakarto Real-Time Layers" are vector geometry layers stored on the Jakarto server.
 
-Le but est de pouvoir les charger et les éditer dans QGIS, et qu'ils soient synchronisés avec les autres services de Jakarto (jakartowns, etc.). QGIS n'est pas requis, on peut s'en servir pour partager des données entre collègues sur Jakartowns seulement.
+With this plugin, you can load and edit them in QGIS, and have them synchronized with other Jakarto services (jakartowns, etc.). QGIS is not required to use Real-Time Layers, it can be used to share data between users on Jakartowns only.
 
-## Architecture et détails d'implémentation
+## Architecture and Implementation Details
 
 ```mermaid
 architecture-beta
@@ -31,49 +30,49 @@ architecture-beta
     realtime:R <-- B:supabase
 ```
 
-`Adapter` s'occupe d'écouter les évènements, transformer les features (`Converters`) et les passer soit à QGIS, soit à Supabase. Pour se connecter à QGIS, il utilise les fonctionnalités de plugin QGIS. Pour se connecter à Supabase, il utilise les librairies `postgrest` (pour les évènements de QGIS) et `realtime` (pour les évènements externes).
+`Adapter` handles listening to events, transforming features (`Converters`) and passing them either to QGIS or Supabase. To connect to QGIS, it uses QGIS plugin functionality. To connect to Supabase, it uses the `postgrest` (for QGIS events) and `realtime` (for external events) libraries.
 
-La correspondance entre les ids des features QGIS et Supabase sont stockées en mémoire dans la classe `Layer`.
+The correspondence between QGIS and Supabase feature IDs is stored in memory in the `Layer` class.
 
-Il y a 6 types d'évènements:
+There are 6 types of events:
 
-- `qgis_insert`: une feature est créée dans QGIS
-- `qgis_update`: une feature est mise à jour dans QGIS
-- `qgis_delete`: une feature est supprimée dans QGIS
-- `supabase_insert`: une feature est créée dans Supabase
-- `supabase_update`: une feature est mise à jour dans Supabase
-- `supabase_delete`: une feature est supprimée dans Supabase
+- `QGISInsertEvent`: a feature is created in QGIS
+- `QGISUpdateEvent`: a feature is updated in QGIS
+- `QGISDeleteEvent`: a feature is deleted in QGIS
+- `SupabaseInsertMessage`: a feature is created in Supabase
+- `SupabaseUpdateMessage`: a feature is updated in Supabase
+- `SupabaseDeleteMessage`: a feature is deleted in Supabase
 
-Pour chaque évènement, l'adapter va transformer les features et les passer à l'autre service (soit QGIS, soit Supabase). Il doit aussi ignorer le prochain message, par exemple:
+For each event, the adapter will transform the features and pass them to the other service (either QGIS or Supabase). It must also ignore the next message, for example:
 
-- `QGISInsertEvent` -> La feature est envoyée à Supabase
-- `SupabaseInsertMessage` -> On reçoit un message, mais pour la même feature qui vient d'être créée, on ignore le message
+- `QGISInsertEvent` -> The feature is sent to Supabase
+- `SupabaseInsertMessage` -> We receive a message, but for the same feature that was just created, we ignore the message
 
 ## Roadmap
 
-- [x] Afficher les layers dans QGIS
-- [x] Créer et modifier des points sur les layers, et que ce soit synchronisé avec la base de données supabase
-- [x] Écouter les modifications sur les layers dans supabase et les appliquer aux layers dans QGIS.
-- [x] Afficher les layers dans Jakartowns
-- [x] Créer et modifier des points sur les layers dans Jakartowns et que ce soit synchronisé avec la base de données supabase
-- [x] Implémenter la protection et les droits d'accès des couches
-- [x] Pour aider à la localisation, afficher un point à l'endroit où l'utilisateur se trouve dans le navigateur Jakartowns (comme le curseur jaune sur la minimap de Jakartowns)
-- [ ] Implémenter pour les autres types de géométries
+- [x] Display layers in QGIS
+- [x] Create and modify points on layers, and have it synchronized with the Supabase database
+- [x] Listen to modifications on layers in Supabase and apply them to layers in QGIS
+- [x] Display layers in Jakartowns
+- [x] Create and modify points on layers in Jakartowns and have it synchronized with the Supabase database
+- [x] Implement layer protection and access rights
+- [x] To help with localization, display a point at the user's location in the Jakartowns browser (like the yellow cursor on the Jakartowns minimap)
+- [ ] Implement for other geometry types
 
 ## Installation
 
-Le projet est encore très prototype, il se peut qu'il manque des étapes dans cette liste (notamment, le développement sous Windows n'est pas encore supporté):
+The project is still very much a prototype, some steps might be missing from this list (notably, development under Windows is not yet supported):
 
-- (Optionel) Suivre les instructions pour [installer supabase en self host](https://supabase.com/docs/guides/self-hosting/docker)
-- Exécuter `just venv` pour créer l'environnement virtuel et installer les dépendances.
-- Ouvrir QGIS avec le repo comme dossier de plugin: `just run-qgis`
-- Installer "Jakarto layers qgis plugin" dans le menu des plugins QGIS.
-- Le plugin "Plugin Reloader" est recommandé pour le développement, il fonctionne bien avec ce projet.
+- (Optional) Follow the instructions to [install Supabase self-hosted](https://supabase.com/docs/guides/self-hosting/docker)
+- Run `just venv` to create the virtual environment and install dependencies
+- Open QGIS with the repo as plugin folder: `just run-qgis`
+- Install "Jakarto layers qgis plugin" in the QGIS plugins menu
+- The "Plugin Reloader" plugin is recommended for development, it works well with this project
 
-Voir `just` pour d'autres commandes de développement.
+See `just` for other development commands.
 
 ## Notes
 
-Dans QGIS, QtWebKit n'est pas utilisable, et l'installation de QtWebEngine n'est pas assez fluide pour le recommander aux utilisateurs.
+In QGIS, QtWebKit is not usable, and the installation of QtWebEngine is not smooth enough to recommend to users.
 
-Toutefois, avec QGIS 4 et Qt6, il serait peut-être possible d'afficher un navigateur web directement dans l'interface de QGIS.
+However, with QGIS 4 and Qt6, it might be possible to display a web browser directly in the QGIS interface.
