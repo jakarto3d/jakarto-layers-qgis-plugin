@@ -1,11 +1,14 @@
 import os
 from pathlib import Path
 
-from qgis.PyQt.QtCore import QMetaType
+from qgis.core import Qgis
+from qgis.PyQt.QtCore import QMetaType, QVariant
 
 HERE = Path(__file__).parent
 
 RESOURCES_DIR = HERE / "resources"
+
+QGIS_VERSION_INT: int = Qgis.QGIS_VERSION_INT
 
 # prod variables
 supabase_url = "https://supabase.jakarto.com"
@@ -71,12 +74,26 @@ qmetatype_to_python: dict[QMetaType, str] = {
     QMetaType.QTime: "time",
     QMetaType.QDateTime: "datetime",
 }
-python_to_qmetatype: dict[str, QMetaType] = {
-    "bool": QMetaType.Bool,
-    "int": QMetaType.Int,
-    "float": QMetaType.Double,
-    "str": QMetaType.QString,
-    "date": QMetaType.QDate,
-    "time": QMetaType.QTime,
-    "datetime": QMetaType.QDateTime,
-}
+
+python_to_qmetatype: dict[str, QMetaType | QVariant]
+if QGIS_VERSION_INT >= 33800:
+    python_to_qmetatype = {
+        "bool": QMetaType.Bool,
+        "int": QMetaType.Int,
+        "float": QMetaType.Double,
+        "str": QMetaType.QString,
+        "date": QMetaType.QDate,
+        "time": QMetaType.QTime,
+        "datetime": QMetaType.QDateTime,
+    }
+else:
+    # use QVariant if version is lower than 3.38
+    python_to_qmetatype = {
+        "bool": QVariant.Bool,
+        "int": QVariant.Int,
+        "float": QVariant.Double,
+        "str": QVariant.String,
+        "date": QVariant.Date,
+        "time": QVariant.Time,
+        "datetime": QVariant.DateTime,
+    }
