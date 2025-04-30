@@ -49,6 +49,16 @@ if not verify_ssl:
     client.connect = patched_connect
 
 
+def get_geometry_type_str(geometry_type) -> str:
+    """To support QGIS < 3.26 where Qgis.GeometryType is not available."""
+    value = geometry_type.value
+    return {
+        0: "point",
+        1: "line",
+        2: "polygon",
+    }.get(value, "unknown")
+
+
 geometry_types = {
     "point": "Point",
     "line": "LineString",
@@ -56,7 +66,7 @@ geometry_types = {
 }
 geometry_postgis_to_alias = {v: k for k, v in geometry_types.items()}
 
-# https://doc.qt.io/qt-5/qmetatype.html
+
 qmetatype_to_python: dict[QMetaType, str] = {
     QMetaType.Bool: "bool",
     QMetaType.Int: "int",

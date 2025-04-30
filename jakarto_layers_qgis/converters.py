@@ -5,7 +5,6 @@ from datetime import date, datetime, time
 from typing import TYPE_CHECKING, Any, Optional
 
 from qgis.core import (
-    Qgis,
     QgsFeature,
     QgsGeometry,
     QgsPoint,
@@ -13,7 +12,11 @@ from qgis.core import (
 )
 from qgis.PyQt.QtCore import QDate, QDateTime, QVariant
 
-from .constants import geometry_types, qmetatype_to_python
+from .constants import (
+    geometry_types,
+    get_geometry_type_str,
+    qmetatype_to_python,
+)
 from .supabase_models import LayerAttribute, SupabaseFeature, SupabaseLayer
 
 if TYPE_CHECKING:
@@ -143,7 +146,7 @@ def qgis_layer_to_supabase_layer(
     parent_id: Optional[str] = None,
     temporary_layer: bool = False,
 ) -> SupabaseLayer:
-    if qgis_layer.geometryType() != Qgis.GeometryType.Point:
+    if get_geometry_type_str(qgis_layer.geometryType()) != "point":
         raise ValueError("Only point layers are supported")
 
     if supabase_layer_id is None:

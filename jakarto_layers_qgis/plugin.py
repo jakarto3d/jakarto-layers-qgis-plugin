@@ -31,7 +31,7 @@ from qgis.utils import iface
 
 from . import auth
 from .adapter import Adapter
-from .constants import jakartowns_url
+from .constants import get_geometry_type_str, jakartowns_url
 from .layer import Layer
 from .ui.create_sub_layer import CreateSubLayerDialog
 from .ui.main_panel import MainPanel
@@ -188,7 +188,7 @@ class Plugin:
         return (
             layer is not None
             and hasattr(layer, "geometryType")
-            and layer.geometryType() == Qgis.GeometryType.Point
+            and get_geometry_type_str(layer.geometryType()) == "point"
         )
 
     def on_current_layer_changed(self, layer: Optional[QgsMapLayer] = None) -> None:
@@ -473,7 +473,7 @@ class Plugin:
             return
         if not hasattr(layer, "geometryType"):
             return
-        if layer.geometryType() != Qgis.GeometryType.Point:
+        if get_geometry_type_str(layer.geometryType()) != "point":
             return
 
         try:
