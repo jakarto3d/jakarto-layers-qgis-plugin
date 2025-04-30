@@ -17,3 +17,5 @@ user-history.db
 .coverage
 
 jakarto_layers_qgis/vendor/
+
+resources_rc.py
