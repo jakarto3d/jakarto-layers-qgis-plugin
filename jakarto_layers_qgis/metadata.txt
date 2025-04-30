@@ -1,16 +1,25 @@
 [general]
-name=Jakarto layers QGIS Plugin
-description=
-about=
+name=Jakarto Real-Time Layers
+description=Real-time synchronization between QGIS and Jakartowns
+about=Access, visualize, and edit geospatial layers in both QGIS and Jakartowns with bidirectional synchronization.
+    
+    Only point layers are supported at this time.
+    
+    An active Jakarto account is required to use this plugin.
+    
+    Jakartowns is a web-based platform where you can create and import measurements over massive LiDAR and imagery data.
+    
+    Jakarto is a provider of digital twin and asset inventory solutions, specializing in high-definition LiDAR and 360 imagery for creating precise digital twins. Their platform enables virtual surveying, asset management, and urban planning through comprehensive 3D mobile mapping data. Learn more at jakarto.com
 version=0.1.0
 qgisMinimumVersion=3.30
 author=David Caron
 email=david.caron@jakarto.com
 changelog=
-tags=
+    0.1.0 - Initial release
+tags=browser, cloud, jakarto, layers, realtime, shared, sharing, collaboration, internet, sync
 repository=https://github.com/jakarto3d/jakarto-layers-qgis-plugin
 tracker=https://github.com/jakarto3d/jakarto-layers-qgis-plugin/issues
-homepage=https://github.com/jakarto3d/jakarto-layers-qgis-plugin
+homepage=https://jakarto.com
 category=Plugins
 experimental=True
 deprecated=False
