@@ -51,6 +51,13 @@ def plugin(qgis_app):
     return plugin_object
 
 
+@pytest.fixture(autouse=True, scope="session")
+def iface(qgis_iface):
+    qgis_iface.addPluginToWebMenu = lambda *a, **kw: None
+    qgis_iface.removePluginWebMenu = lambda *a, **kw: None
+    qgis_iface.webMenu = lambda *a, **kw: QMenu()
+
+
 @pytest.fixture(autouse=True)
 def mock_session(plugin, monkeypatch) -> Mock:
     if MOCK_SESSION:
