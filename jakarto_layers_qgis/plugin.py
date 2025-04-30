@@ -14,6 +14,7 @@ from qgis.core import (
     QgsProject,
 )
 from qgis.gui import QgisInterface
+from qgis.PyQt import sip
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import (
@@ -22,6 +23,7 @@ from qgis.PyQt.QtWidgets import (
     QInputDialog,
     QMenu,
     QMessageBox,
+    QToolBar,
     QTreeWidgetItem,
     QWidget,
 )
@@ -42,13 +44,11 @@ HERE = Path(__file__).parent
 class Plugin:
     """QGIS Plugin Implementation."""
 
-    name = "jakarto_layers_qgis"
-
     def __init__(self) -> None:
         self.actions: list[QAction] = []
-        self.menu = Plugin.name
-        self.toolbar = None
-        self._panel = None
+        self.menu: QMenu | None = None
+        self.toolbar: QToolBar | None = None
+        self._panel: MainPanel | None = None
 
         self._show_layers_action = None
         self._sync_layer_action = None
@@ -121,8 +121,8 @@ class Plugin:
         if whats_this is not None:
             action.setWhatsThis(whats_this)
 
-        if add_to_menu:
-            iface.addPluginToMenu(self.menu, action)
+        if add_to_menu and self.menu is not None:
+            self.menu.addAction(action)
 
         self.actions.append(action)
 
@@ -130,8 +130,16 @@ class Plugin:
 
     def initGui(self) -> None:  # noqa N802
         self._panel = MainPanel()
-        self.toolbar = iface.addToolBar("Jakarto Layers")
-        self.toolbar.setObjectName("JakartoLayers")
+        self.toolbar = iface.addToolBar("Jakarto Real-Time Layers")
+
+        self.menu = QMenu("Jakarto Real-Time Layers")
+        self.menu.setIcon(QIcon(":/resources/icons/jakartowns-sync-36.png"))
+
+        # workaround for WebMenu
+        temp_action = QAction()
+        iface.addPluginToWebMenu("Jakarto Layers", temp_action)
+        iface.webMenu().addMenu(self.menu)
+        iface.removePluginWebMenu("Jakarto Layers", temp_action)
 
         self.panel.layerTree.setExpandsOnDoubleClick(False)
         self.panel.layerTree.itemSelectionChanged.connect(
@@ -154,21 +162,21 @@ class Plugin:
         QgsProject.instance().layersRemoved.connect(self.on_layers_removed)
         iface.currentLayerChanged.connect(self.on_current_layer_changed)
 
-        self._show_layers_action = self.add_action(
-            ":/resources/icons/layer-solid-36.png",
-            text="Jakarto Layers",
-            callback=self.show_layers_list,
-            parent=iface.mainWindow(),
-        )
         self._sync_layer_action = self.add_action(
             ":/resources/icons/jakartowns-sync-36.png",
-            text="Sync layer with Jakartowns",
+            text="Sync active layer with Jakartowns",
             callback=self.sync_layer_with_jakartowns,
             parent=iface.mainWindow(),
         )
+        self._show_layers_action = self.add_action(
+            ":/resources/icons/layer-solid-36.png",
+            text="Jakarto Real-Time Layers list",
+            callback=self.show_layers_list,
+            parent=iface.mainWindow(),
+        )
         self.on_current_layer_changed()
-        self.toolbar.addAction(self._show_layers_action)
         self.toolbar.addAction(self._sync_layer_action)
+        self.toolbar.addAction(self._show_layers_action)
 
         self.remove_all_presence_layers()
 
@@ -255,7 +263,8 @@ class Plugin:
             self.toolbar = None
 
         for action in self.actions:
-            iface.removePluginMenu(Plugin.name, action)
+            if not sip.isdeleted(action):
+                action.deleteLater()
 
     def setup_auth(self) -> bool:
         return auth.setup_auth(check_function=self.adapter.setup_auth)

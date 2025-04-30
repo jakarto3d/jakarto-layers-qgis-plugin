@@ -13,6 +13,7 @@ about=Access, visualize, and edit geospatial layers in both QGIS and Jakartowns 
 version=0.1.0
 qgisMinimumVersion=3.30
 author=David Caron
+icon=ui/icons/jakartowns-sync-36.png
 email=david.caron@jakarto.com
 changelog=
     0.1.0 - Initial release

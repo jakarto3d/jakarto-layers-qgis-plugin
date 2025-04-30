@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Jakarto layers</string>
+   <string>Jakarto Real-Time Layers</string>
   </property>
   <widget class="QWidget" name="dockWidgetContents">
    <property name="styleSheet">
