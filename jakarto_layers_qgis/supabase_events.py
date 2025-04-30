@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, Optional, Union
 
 from .supabase_models import SupabaseFeature
 
 
 def parse_message(
     message: dict,
-) -> SupabaseInsertMessage | SupabaseUpdateMessage | SupabaseDeleteMessage | None:
+) -> Optional[
+    Union[SupabaseInsertMessage, SupabaseUpdateMessage, SupabaseDeleteMessage]
+]:
     type_ = message.get("data", {}).get("type")
     if type_ == "INSERT":
         return SupabaseInsertMessage.from_json(message)
@@ -25,7 +27,7 @@ class SupabaseInsertMessage:
     type: Literal["INSERT"]
     record: SupabaseFeature
     columns: list[dict[str, str]]
-    errors: dict | None
+    errors: Optional[dict]
     schema: str
     commit_timestamp: str
 
@@ -51,10 +53,10 @@ class SupabaseUpdateMessage:
     type: Literal["UPDATE"]
     record: SupabaseFeature
     columns: list[dict[str, str]]
-    errors: dict | None
+    errors: Optional[dict]
     schema: str
     commit_timestamp: str
-    old_record: dict | None
+    old_record: Optional[dict]
 
     @classmethod
     def from_json(cls, json_data: dict) -> SupabaseUpdateMessage:
@@ -78,7 +80,7 @@ class SupabaseDeleteMessage:
     table: str
     type: Literal["DELETE"]
     columns: list[dict[str, str]]
-    errors: dict | None
+    errors: Optional[dict]
     schema: str
     commit_timestamp: str
     old_record_id: str

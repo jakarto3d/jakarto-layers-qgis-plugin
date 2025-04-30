@@ -8,6 +8,7 @@ exclude = [
     "jakarto_layers_qgis/vendor/**",
     "jakarto_layers_qgis/ui/resources_rc.py"
 ]
+target-version = "py39"
 
 [tool.coverage.run]
 source = ["jakarto_layers_qgis"]

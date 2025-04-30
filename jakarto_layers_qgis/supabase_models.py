@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Optional
 
 from .constants import geometry_postgis_to_alias
 
@@ -13,7 +13,7 @@ class SupabaseFeature:
     layer_id: str
     attributes: dict[str, Any]
     geom: dict[str, Any]
-    parent_id: str | None = None
+    parent_id: Optional[str] = None
 
     @classmethod
     def from_json(cls, json_data: dict[str, Any]) -> SupabaseFeature:
@@ -75,7 +75,7 @@ class SupabaseLayer:
     geometry_type: str
     attributes: list[LayerAttribute]
     srid: int
-    parent_id: str | None = None
+    parent_id: Optional[str] = None
     temporary: bool = False
 
     def to_json(self) -> dict[str, Any]:

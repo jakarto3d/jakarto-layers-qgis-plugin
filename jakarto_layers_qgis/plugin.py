@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Optional, Union
 
 from PyQt5.QtCore import QUrl
 from PyQt5.QtGui import QDesktopServices
@@ -46,9 +46,9 @@ class Plugin:
 
     def __init__(self) -> None:
         self.actions: list[QAction] = []
-        self.menu: QMenu | None = None
-        self.toolbar: QToolBar | None = None
-        self._panel: MainPanel | None = None
+        self.menu: Optional[QMenu] = None
+        self.toolbar: Optional[QToolBar] = None
+        self._panel: Optional[MainPanel] = None
 
         self._show_layers_action = None
         self._sync_layer_action = None
@@ -69,15 +69,15 @@ class Plugin:
 
     def add_action(
         self,
-        icon_path: str | Path,
+        icon_path: Union[str, Path],
         text: str,
         callback: Callable,
         *,
         enabled_flag: bool = True,
         add_to_menu: bool = True,
-        status_tip: str | None = None,
-        whats_this: str | None = None,
-        parent: QWidget | None = None,
+        status_tip: Optional[str] = None,
+        whats_this: Optional[str] = None,
+        parent: Optional[QWidget] = None,
     ) -> QAction:
         """Add a toolbar icon to the toolbar.
 
@@ -191,7 +191,7 @@ class Plugin:
             and layer.geometryType() == Qgis.GeometryType.Point
         )
 
-    def on_current_layer_changed(self, layer: QgsMapLayer | None = None) -> None:
+    def on_current_layer_changed(self, layer: Optional[QgsMapLayer] = None) -> None:
         if layer is None:
             layer = iface.activeLayer()
         syncable = self.is_layer_syncable(layer)
@@ -359,7 +359,7 @@ class Plugin:
 
         self.panel.layerTree.expandAll()
 
-    def get_selected_layer(self, value: Any = None) -> str | None:
+    def get_selected_layer(self, value: Any = None) -> Optional[str]:
         if value is not None and hasattr(value, "data"):
             try:
                 return value.data(0, Qt.ItemDataRole.UserRole)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import time
+from typing import Optional
 
 import requests
 
@@ -13,13 +14,13 @@ class SupabaseSession:
     _session_max_age = 5 * 60
 
     def __init__(self) -> None:
-        self._email: str | None = None
-        self._password: str | None = None
-        self._user_id: str | None = None
-        self._access_token: str | None = None
-        self._refresh_token: str | None = None
-        self._token_expires_at_timestamp: int | None = None
-        self._session: requests.Session | None = None
+        self._email: Optional[str] = None
+        self._password: Optional[str] = None
+        self._user_id: Optional[str] = None
+        self._access_token: Optional[str] = None
+        self._refresh_token: Optional[str] = None
+        self._token_expires_at_timestamp: Optional[int] = None
+        self._session: Optional[requests.Session] = None
         self._session_time = time.time()
 
     def setup_auth(self, email: str, password: str) -> bool:
@@ -51,7 +52,7 @@ class SupabaseSession:
         return self.session.request(method, url, **kwargs)
 
     @property
-    def access_token(self) -> str | None:
+    def access_token(self) -> Optional[str]:
         self.session  # refresh token if needed
         return self._access_token
 

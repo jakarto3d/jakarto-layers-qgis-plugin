@@ -1,3 +1,4 @@
+from typing import Optional
 from unittest.mock import Mock, call
 
 from jakarto_layers_qgis import auth
@@ -7,10 +8,10 @@ def setup_mocks(
     monkeypatch,
     *_,
     is_auth_database_set: bool = True,
-    auth_config_id: str | None = None,
-    auth_config: tuple[str, str] | None = None,
-    auth_settings: tuple[str | None, str | None] = (None, None),
-    ask_credentials_return_value: tuple[str | None, str | None] = (None, None),
+    auth_config_id: Optional[str] = None,
+    auth_config: Optional[tuple[str, str]] = None,
+    auth_settings: tuple[Optional[str], Optional[str]] = (None, None),
+    ask_credentials_return_value: tuple[Optional[str], Optional[str]] = (None, None),
 ):
     auth_manager = Mock()
     monkeypatch.setattr(

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from queue import Queue
-from typing import Any, Callable, overload
+from typing import Any, Callable, Optional, overload
 
 import requests
 from qgis.core import QgsApplication, QgsTask
@@ -143,11 +143,11 @@ class Postgrest:
         method: str,
         *,
         callback: None = None,
-        rpc: str | None = None,
-        table_name: str | None = None,
-        geometry_type: str | None = None,
+        rpc: Optional[str] = None,
+        table_name: Optional[str] = None,
+        geometry_type: Optional[str] = None,
         json=None,
-        params: dict[str, Any] | None = None,
+        params: Optional[dict[str, Any]] = None,
         timeout: int = DEFAULT_TIMEOUT,
     ) -> requests.Response: ...
 
@@ -157,11 +157,11 @@ class Postgrest:
         method: str,
         *,
         callback: Callable,
-        rpc: str | None = None,
-        table_name: str | None = None,
-        geometry_type: str | None = None,
+        rpc: Optional[str] = None,
+        table_name: Optional[str] = None,
+        geometry_type: Optional[str] = None,
         json=None,
-        params: dict[str, Any] | None = None,
+        params: Optional[dict[str, Any]] = None,
         timeout: int = DEFAULT_TIMEOUT,
     ) -> None: ...
 
@@ -169,14 +169,14 @@ class Postgrest:
         self,
         method: str,
         *,
-        callback: Callable | None = None,
-        rpc: str | None = None,
-        table_name: str | None = None,
-        geometry_type: str | None = None,
+        callback: Optional[Callable] = None,
+        rpc: Optional[str] = None,
+        table_name: Optional[str] = None,
+        geometry_type: Optional[str] = None,
         json=None,
-        params: dict[str, Any] | None = None,
+        params: Optional[dict[str, Any]] = None,
         timeout: int = DEFAULT_TIMEOUT,
-    ) -> requests.Response | None:
+    ) -> Optional[requests.Response]:
         if table_name is None and geometry_type is None and not rpc:
             raise ValueError("Either table_name or geometry_type must be provided")
         if table_name is None:

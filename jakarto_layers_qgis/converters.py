@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime, time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 
 from qgis.core import (
     Qgis,
@@ -25,8 +25,8 @@ def qgis_to_supabase_feature(
     feature: QgsFeature,
     *,
     supabase_layer_id: str,
-    supabase_feature_id: str | None = None,
-    feature_type: str | None = None,
+    supabase_feature_id: Optional[str] = None,
+    feature_type: Optional[str] = None,
     attribute_names: list[str],
 ) -> SupabaseFeature:
     attributes = {n: v for n, v in zip(attribute_names, feature.attributes())}
@@ -68,7 +68,7 @@ def qgis_to_supabase_feature(
     )
 
 
-def str_convert(value: str | None, python_type: str) -> Any:
+def str_convert(value: Optional[str], python_type: str) -> Any:
     if value in (None, "None"):
         return None
     try:
@@ -136,11 +136,11 @@ def geom_force3d(geom: dict[str, Any]) -> dict[str, Any]:
 
 def qgis_layer_to_supabase_layer(
     qgis_layer: QgsVectorLayer,
-    supabase_layer_id: str | None = None,
+    supabase_layer_id: Optional[str] = None,
     *,
-    layer_name: str | None = None,
+    layer_name: Optional[str] = None,
     srid: int,
-    parent_id: str | None = None,
+    parent_id: Optional[str] = None,
     temporary_layer: bool = False,
 ) -> SupabaseLayer:
     if qgis_layer.geometryType() != Qgis.GeometryType.Point:

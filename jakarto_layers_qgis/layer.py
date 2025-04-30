@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Optional, Union
 
 from qgis.core import (
     QgsFeature,
@@ -34,10 +35,11 @@ class Layer:
         supabase_layer_id: str,
         geometry_type: str,
         supabase_srid: int,
-        attributes: list[LayerAttribute] | None,
-        supabase_parent_layer_id: str | None,
+        attributes: Optional[list[LayerAttribute]],
+        supabase_parent_layer_id: Optional[str],
         temporary: bool,
         commit_callback: Callable,
+        qgis_layer: Optional[QgsVectorLayer] = None,
     ) -> None:
         self.name = name
         self.supabase_layer_id = supabase_layer_id
@@ -54,12 +56,12 @@ class Layer:
         self.manually_updated_supabase_ids: set[str] = set()
 
         self._qgis_events: list[
-            QGISInsertEvent | QGISUpdateEvent | QGISDeleteEvent
+            Union[QGISInsertEvent, QGISUpdateEvent, QGISDeleteEvent]
         ] = []
 
         self._layer_attributes_modified: bool = False
 
-        self._qgis_layer = None
+        self._qgis_layer = qgis_layer
 
         self._qgis_layer_signals_initialized: bool = False
 
@@ -70,7 +72,7 @@ class Layer:
         cls,
         supabase_layer: SupabaseLayer,
         commit_callback: Callable,
-        qgis_layer: QgsVectorLayer | None = None,
+        qgis_layer: Optional[QgsVectorLayer] = None,
     ) -> Layer:
         layer = cls(
             name=supabase_layer.name,
@@ -81,9 +83,8 @@ class Layer:
             supabase_parent_layer_id=supabase_layer.parent_id,
             temporary=supabase_layer.temporary,
             commit_callback=commit_callback,
+            qgis_layer=qgis_layer,
         )
-        if qgis_layer is not None:
-            layer._qgis_layer = qgis_layer
         return layer
 
     @property
@@ -152,10 +153,10 @@ class Layer:
         self._qgis_feature_id_to_supabase_id[qgis_feature_id] = supabase_feature_id
         self._supabase_feature_id_to_qgis_id[supabase_feature_id] = qgis_feature_id
 
-    def get_supabase_feature_id(self, qgis_id: int) -> str | None:
+    def get_supabase_feature_id(self, qgis_id: int) -> Optional[str]:
         return self._qgis_feature_id_to_supabase_id.get(qgis_id)
 
-    def get_qgis_feature_id(self, supabase_id: str) -> int | None:
+    def get_qgis_feature_id(self, supabase_id: str) -> Optional[int]:
         return self._supabase_feature_id_to_qgis_id.get(supabase_id)
 
     def remove_supabase_feature_id(self, supabase_id: str) -> None:
@@ -202,7 +203,7 @@ class Layer:
         )
         self._reset_edits()
 
-    def get_qgis_feature(self, qgis_id: int) -> QgsFeature | None:
+    def get_qgis_feature(self, qgis_id: int) -> Optional[QgsFeature]:
         feature = self.qgis_layer.getFeature(qgis_id)
         if not feature.isValid():
             return None

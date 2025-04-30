@@ -1,4 +1,4 @@
-from typing import Callable
+from typing import Callable, Optional
 
 from qgis.core import QgsApplication, QgsAuthMethodConfig
 from qgis.PyQt.QtCore import QSettings
@@ -65,7 +65,7 @@ def setup_auth(check_function: Callable[[str, str], bool]) -> bool:
     return False
 
 
-def _ask_credentials(in_qsettings: bool = False) -> tuple[str | None, str | None]:
+def _ask_credentials(in_qsettings: bool = False) -> tuple[Optional[str], Optional[str]]:
     """Ask for credentials and store them in the authentication database."""
     description = "Please enter your credentials to access Jakarto services."
     if in_qsettings:
@@ -98,7 +98,7 @@ def _set_auth_config_id(authcfg: str) -> None:
     settings.setValue(AUTH_CONFIG_ID_KEY, authcfg)
 
 
-def get_credentials_from_settings() -> tuple[str | None, str | None]:
+def get_credentials_from_settings() -> tuple[Optional[str], Optional[str]]:
     """Get credentials from QSettings if they exist."""
     settings = QSettings("Jakarto", "JakartoPlugin")
     username = settings.value("jakartowns/username")
@@ -133,7 +133,7 @@ def _is_auth_database_set() -> bool:
     return False
 
 
-def _get_credentials_from_auth_database() -> tuple[str | None, str | None]:
+def _get_credentials_from_auth_database() -> tuple[Optional[str], Optional[str]]:
     """Get credentials from the authentication database."""
     auth_mgr = QgsApplication.authManager()
     if not _is_auth_database_set():

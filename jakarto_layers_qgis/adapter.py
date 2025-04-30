@@ -5,7 +5,7 @@ import threading
 import traceback
 import uuid
 from itertools import chain
-from typing import Any, Callable
+from typing import Any, Callable, Optional, Union
 
 from PyQt5.QtCore import QObject, pyqtBoundSignal, pyqtSignal
 from qgis.core import (
@@ -47,7 +47,7 @@ class Adapter(QObject):
         self._all_layers: dict[str, Layer] = {}
         self._session = SupabaseSession()
         self._postgrest_client = Postgrest(self._session)
-        self._realtime: AsyncRealtimeClient | None = None
+        self._realtime: Optional[AsyncRealtimeClient] = None
         self._realtime_thread_event = threading.Event()
         self._presence_manager = PresenceManager()
 
@@ -77,7 +77,7 @@ class Adapter(QObject):
     def _commit_callback(
         self,
         layer: Layer,
-        events: list[QGISInsertEvent | QGISUpdateEvent | QGISDeleteEvent],
+        events: list[Union[QGISInsertEvent, QGISUpdateEvent, QGISDeleteEvent]],
         layer_attributes_modified: bool,
     ) -> None:
         """Update the database tables after a qgis manual edit.
@@ -175,7 +175,7 @@ class Adapter(QObject):
         ]
         return top_layers
 
-    def get_layer(self, supabase_id: str | None) -> Layer | None:
+    def get_layer(self, supabase_id: Optional[str]) -> Optional[Layer]:
         if supabase_id is None:
             return None
         if supabase_id in self._all_layers:
@@ -187,8 +187,8 @@ class Adapter(QObject):
         qgis_layer: QgsVectorLayer,
         qgis_features: list[QgsFeature],
         *,
-        layer_name: str | None = None,
-        parent_layer: Layer | None = None,
+        layer_name: Optional[str] = None,
+        parent_layer: Optional[Layer] = None,
         temporary_layer: bool = False,
     ) -> tuple[SupabaseLayer, list[SupabaseFeature]]:
         """Create a new supabase layer from a list of qgis features.
@@ -342,7 +342,7 @@ class Adapter(QObject):
         return True
 
     def add_layer(
-        self, supabase_id: str | None, callback: Callable[[bool], Any]
+        self, supabase_id: Optional[str], callback: Callable[[bool], Any]
     ) -> None:
         if not (layer := self.get_layer(supabase_id)):
             callback(False)
@@ -370,7 +370,7 @@ class Adapter(QObject):
         """This is meant to be called when the plugin is needed (on action click for example)."""
         return self._session.setup_auth(email, password)
 
-    def remove_layer(self, supabase_id: str | None) -> bool:
+    def remove_layer(self, supabase_id: Optional[str]) -> bool:
         if not (layer := self.get_layer(supabase_id)):
             return False
         if layer.supabase_layer_id not in self._loaded_layers:
@@ -497,7 +497,7 @@ class Adapter(QObject):
         self.stop_realtime()
         self._session.close()
 
-    def merge_sub_layer(self, supabase_id: str | None) -> None:
+    def merge_sub_layer(self, supabase_id: Optional[str]) -> None:
         if not (layer := self.get_layer(supabase_id)):
             return
         if layer.supabase_parent_layer_id is None:
@@ -542,7 +542,7 @@ class Adapter(QObject):
             duration=5,
         )
 
-    def rename_layer(self, supabase_id: str | None, new_name: str) -> None:
+    def rename_layer(self, supabase_id: Optional[str], new_name: str) -> None:
         """Rename a layer.
 
         Args:

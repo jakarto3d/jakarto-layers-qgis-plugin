@@ -1,5 +1,5 @@
 from time import time
-from typing import Any
+from typing import Any, Optional
 
 from PyQt5.QtCore import QObject, pyqtSignal
 from qgis.core import (
@@ -35,7 +35,7 @@ class PresenceManager(QObject):
 
     def __init__(self) -> None:
         super().__init__()
-        self._presence_layer: QgsVectorLayer | None = None
+        self._presence_layer: Optional[QgsVectorLayer] = None
         self._presence_states: dict[str, dict[str, Any]] = {}
         self._last_presence_point: dict[str, tuple[QgsGeometry, float]] = {}
         self.center_view_on_position_update = False
