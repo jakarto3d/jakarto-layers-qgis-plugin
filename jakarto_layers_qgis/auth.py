@@ -1,6 +1,6 @@
 from typing import Callable
 
-from qgis.core import Qgis, QgsApplication, QgsAuthMethodConfig, QgsMessageLog
+from qgis.core import QgsApplication, QgsAuthMethodConfig
 from qgis.PyQt.QtCore import QSettings
 from qgis.PyQt.QtWidgets import (
     QDialog,
@@ -10,11 +10,9 @@ from qgis.PyQt.QtWidgets import (
     QVBoxLayout,
 )
 
+from .logs import log
+
 AUTH_CONFIG_ID_KEY = "jakarto_auth_config_id"
-
-
-def _log(message: str) -> None:
-    QgsMessageLog.logMessage(message, "Jakarto Layers", Qgis.MessageLevel.Info)
 
 
 def setup_auth(check_function: Callable[[str, str], bool]) -> bool:
@@ -31,13 +29,13 @@ def setup_auth(check_function: Callable[[str, str], bool]) -> bool:
         # store credentials in auth database
         username, password = _get_credentials_from_auth_database()
         if username and password and check_function(username, password):
-            _log(f"Using credentials from auth database: {username}")
+            log(f"Using credentials from auth database: {username}")
             return True
         # check in settings, if we have credentials there, store them in auth database
         username, password = get_credentials_from_settings()
         if username and password and check_function(username, password):
             _set_credentials_in_auth_database(username, password)
-            _log(f"Stored credentials from settings in auth database: {username}")
+            log(f"Stored credentials from settings in auth database: {username}")
             return True
         while True:
             username, password = _ask_credentials(in_qsettings=False)
@@ -45,14 +43,14 @@ def setup_auth(check_function: Callable[[str, str], bool]) -> bool:
                 break
             if check_function(username, password):
                 _set_credentials_in_auth_database(username, password)
-                _log(f"Stored credentials in auth database: {username}")
+                log(f"Stored credentials in auth database: {username}")
                 return True
-            _log(f"Invalid credentials for username: {username}")
+            log(f"Invalid credentials for username: {username}")
     else:
         # legacy way, store credentials in settings
         username, password = get_credentials_from_settings()
         if username and password and check_function(username, password):
-            _log(f"Using credentials from settings: {username}")
+            log(f"Using credentials from settings: {username}")
             return True
         while True:
             username, password = _ask_credentials(in_qsettings=True)
@@ -60,9 +58,9 @@ def setup_auth(check_function: Callable[[str, str], bool]) -> bool:
                 break
             if check_function(username, password):
                 _set_credentials_in_settings(username, password)
-                _log(f"Stored credentials in settings: {username}")
+                log(f"Stored credentials in settings: {username}")
                 return True
-            _log(f"Invalid credentials for username: {username}")
+            log(f"Invalid credentials for username: {username}")
 
     return False
 

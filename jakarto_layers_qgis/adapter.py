@@ -20,7 +20,7 @@ from qgis.utils import iface
 from .constants import anon_key, realtime_url
 from .converters import qgis_layer_to_supabase_layer, qgis_to_supabase_feature
 from .layer import Layer
-from .logs import log
+from .logs import debug
 from .presence import PresenceManager
 from .qgis_events import QGISDeleteEvent, QGISInsertEvent, QGISUpdateEvent
 from .supabase_events import (
@@ -89,7 +89,7 @@ class Adapter(QObject):
 
         for event in events:
             if isinstance(event, QGISInsertEvent):
-                log(f"QGISInsertEvent: {len(event.features)} features")
+                debug(f"QGISInsertEvent: {len(event.features)} features")
                 for feature in event.features:
                     supabase_feature = qgis_to_supabase_feature(
                         feature,
@@ -99,7 +99,7 @@ class Adapter(QObject):
                     self._postgrest_client.add_feature(supabase_feature)
                     layer.add_feature_id(feature.id(), supabase_feature.id)
             elif isinstance(event, QGISUpdateEvent):
-                log(f"QGISUpdateEvent: {len(event.ids)} features")
+                debug(f"QGISUpdateEvent: {len(event.ids)} features")
                 for id_ in event.ids:
                     if not (feature := layer.get_qgis_feature(id_)):
                         continue
@@ -113,7 +113,7 @@ class Adapter(QObject):
                     self._postgrest_client.update_feature(supabase_feature)
                     layer.manually_updated_supabase_ids.add(supabase_feature.id)
             elif isinstance(event, QGISDeleteEvent):
-                log(f"QGISDeleteEvent: {len(event.ids)} features")
+                debug(f"QGISDeleteEvent: {len(event.ids)} features")
                 for id_ in event.ids:
                     supabase_id = layer.get_supabase_feature_id(id_)
                     if supabase_id is None:

@@ -17,7 +17,7 @@ from qgis.utils import iface
 
 from .constants import geometry_types, python_to_qmetatype, qmetatype_to_python
 from .converters import supabase_attribute_to_qgis_attribute, supabase_to_qgis_feature
-from .logs import log
+from .logs import debug
 from .qgis_events import QGISDeleteEvent, QGISInsertEvent, QGISUpdateEvent
 from .supabase_models import LayerAttribute, SupabaseFeature, SupabaseLayer
 
@@ -270,7 +270,7 @@ class Layer:
         if feature.id in self._supabase_feature_id_to_qgis_id:
             return  # echo of a qgis_insert event
 
-        log(f"Supabase InsertMessage: {feature.id}")
+        debug(f"Supabase InsertMessage: {feature.id}")
 
         qgis_feature = supabase_to_qgis_feature(feature, self)
         self.qgis_layer.dataProvider().addFeature(qgis_feature)
@@ -287,7 +287,7 @@ class Layer:
             self.manually_updated_supabase_ids.remove(feature.id)
             return  # echo of a qgis_update event
 
-        log(f"Supabase UpdateMessage: {feature.id}")
+        debug(f"Supabase UpdateMessage: {feature.id}")
 
         qgis_id = self._supabase_feature_id_to_qgis_id.get(feature.id)
         if qgis_id is None:
@@ -335,7 +335,7 @@ class Layer:
         if qgis_id is None:
             return False  # echo of a qgis_delete event
 
-        log(f"Supabase DeleteMessage: {supabase_feature_id}")
+        debug(f"Supabase DeleteMessage: {supabase_feature_id}")
 
         try:
             # remove from those dicts before deleting the feature
