@@ -1,0 +1,237 @@
+FROM debian:bullseye
+
+LABEL Description="Docker container with QGIS dependencies" Vendor="QGIS.org" Version="1.0"
+
+# && echo "deb http://ppa.launchpad.net/ubuntugis/ubuntugis-unstable/ubuntu xenial main" >> /etc/apt/sources.list \
+# && echo "deb-src http://ppa.launchpad.net/ubuntugis/ubuntugis-unstable/ubuntu xenial main" >> /etc/apt/sources.list \
+# && apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 314DF160 \
+
+
+RUN  apt-get update \
+    && apt-get install -y software-properties-common \
+    && apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    apt-transport-https \
+    ca-certificates \
+    cmake \
+    curl \
+    dh-python \
+    gdal-bin \
+    gpsbabel \
+    graphviz \
+    libaio1 \
+    libexiv2-27 \
+    libfcgi0ldbl \
+    'libgsl23|libgsl23' \
+    'libprotobuf-lite17|libprotobuf-lite23' \
+    libqca-qt5-2-plugins \
+    libqt53dextras5 \
+    libqt53drender5 \
+    libqt5concurrent5 \
+    libqt5keychain1 \
+    libqt5positioning5 \
+    libqt5qml5 \
+    libqt5quick5 \
+    libqt5quickcontrols2-5 \
+    libqt5quickwidgets5 \
+    libqt5serialport5 \
+    libqt5sql5-odbc \
+    libqt5sql5-sqlite \
+    libqt5xml5 \
+    libqt5webkit5 \
+    libqwt-qt5-6 \
+    libspatialindex6 \
+    libsqlite3-mod-spatialite \
+    'libzip4|libzip5' \
+    lighttpd \
+    locales \
+    pdal \
+    poppler-utils \
+    python3-future \
+    python3-gdal \
+    python3-mock \
+    python3-nose2 \
+    python3-owslib \
+    python3-pip \
+    python3-psycopg2 \
+    python3-pyproj \
+    python3-pyqt5 \
+    python3-pyqt5.qsci \
+    python3-pyqt5.qtsql \
+    python3-pyqt5.qtsvg \
+    python3-pyqt5.qtwebkit \
+    python3-pyqt5.qtpositioning \
+    python3-sip \
+    python3-termcolor \
+    python3-yaml \
+    qt3d-assimpsceneimport-plugin \
+    qt3d-defaultgeometryloader-plugin \
+    qt3d-gltfsceneio-plugin \
+    qt3d-scene2d-plugin \
+    qt5-image-formats-plugins \
+    saga \
+    supervisor \
+    unzip \
+    xauth \
+    xfonts-100dpi \
+    xfonts-75dpi \
+    xfonts-base \
+    xfonts-scalable \
+    xvfb \
+    ocl-icd-libopencl1 \
+    && pip3 install \
+    numpy \
+    nose2 \
+    pyyaml \
+    mock \
+    future \
+    termcolor \
+    oauthlib \
+    pyopenssl \
+    pep8 \
+    pexpect \
+    capturer \
+    sphinx \
+    requests \
+    six \
+    hdbcli \
+    && apt-get clean
+
+RUN  apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    bison \
+    ccache \
+    clang \
+    cmake \
+    flex \
+    git \
+    grass-dev \
+    libexiv2-dev \
+    libexpat1-dev \
+    libfcgi-dev \
+    libgdal-dev \
+    libgeos-dev \
+    libgsl-dev \
+    libpdal-dev \
+    libpq-dev \
+    libproj-dev \
+    libprotobuf-dev \
+    libqca-qt5-2-dev \
+    libqt5opengl5-dev \
+    libqt5scintilla2-dev \
+    libqt5svg5-dev \
+    libqt5webkit5-dev \
+    libqt5serialport5-dev \
+    libqwt-qt5-dev \
+    libspatialindex-dev \
+    libspatialite-dev \
+    libsqlite3-dev \
+    libsqlite3-mod-spatialite \
+    libzip-dev \
+    libzstd-dev \
+    ninja-build \
+    protobuf-compiler \
+    pyqt5-dev \
+    pyqt5-dev-tools \
+    pyqt5.qsci-dev \
+    python3-all-dev \
+    python3-dev \
+    python3-sip-dev \
+    qt3d5-dev \
+    qt5keychain-dev \
+    qtbase5-dev \
+    qtdeclarative5-dev-tools \
+    qtpositioning5-dev \
+    qttools5-dev \
+    qttools5-dev-tools \
+    qtbase5-private-dev \
+    opencl-headers \
+    ocl-icd-opencl-dev \
+    && apt-get clean
+
+RUN echo "alias python=python3" >> ~/.bash_aliases
+
+ENV QT_SELECT=5
+ENV LANG=C.UTF-8
+ENV PATH="/usr/local/bin:${PATH}"
+
+# build timeout in seconds, so no timeout by default
+ARG BUILD_TIMEOUT=360000
+
+ARG CC=/usr/lib/ccache/gcc
+ARG CXX=/usr/lib/ccache/g++
+ENV LANG=C.UTF-8
+
+RUN git clone --depth 1 --branch final-3_22_16 https://github.com/qgis/QGIS.git /QGIS
+
+RUN mkdir -p /QGIS/.ccache_image_build
+ENV CCACHE_DIR=/QGIS/.ccache_image_build
+RUN ccache -M 1G
+RUN ccache -s
+
+RUN echo "ccache_dir: "$(du -h --max-depth=0 ${CCACHE_DIR})
+
+WORKDIR /QGIS/build
+
+RUN SUCCESS=OK \
+    && cmake \
+    -GNinja \
+    -DUSE_CCACHE=OFF \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DWITH_DESKTOP=ON \
+    -DWITH_SERVER=OFF \
+    -DWITH_3D=OFF \
+    -DWITH_BINDINGS=ON \
+    -DWITH_CUSTOM_WIDGETS=OFF \
+    -DBINDINGS_GLOBAL_INSTALL=ON \
+    -DWITH_STAGED_PLUGINS=ON \
+    -DWITH_GRASS=OFF \
+    -DSUPPRESS_QT_WARNINGS=ON \
+    -DDISABLE_DEPRECATED=ON \
+    -DENABLE_TESTS=OFF \
+    -DWITH_QSPATIALITE=OFF \
+    -DWITH_APIDOC=OFF \
+    -DWITH_ASTYLE=OFF \
+    .. \
+    && ninja install || SUCCESS=FAILED \
+    && echo "$SUCCESS" > /QGIS/build_exit_value
+
+# check build exit value, exit with error if failed
+RUN if [ "$(cat /QGIS/build_exit_value)" = "FAILED" ]; then exit 1; fi
+
+# Additional run-time dependencies
+RUN pip3 install jinja2 pygments pexpect && apt install -y expect
+
+################################################################################
+# Python testing environment setup
+
+# Add QGIS test runner
+RUN cp -r /QGIS/.docker/qgis_resources/test_runner/qgis_* /usr/bin/
+
+# Make all scripts executable
+RUN chmod +x /usr/bin/qgis_*
+
+# Add supervisor service configuration script
+RUN cp -r /QGIS/.docker/qgis_resources/supervisor/ /etc/supervisor
+
+# Python paths are for
+# - kartoza images (compiled)
+# - deb installed
+# - built from git
+# needed to find PyQt wrapper provided by QGIS
+ENV PYTHONPATH=/usr/share/qgis/python/:/usr/share/qgis/python/plugins:/usr/lib/python3/dist-packages/qgis:/usr/share/qgis/python/qgis
+
+WORKDIR /
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+COPY requirements-dev.txt ./
+
+RUN uv venv --system-site-packages --python /usr/bin/python3 \
+    && uv pip install -r requirements-dev.txt
+
+ENV PATH="/.venv/bin:${PATH}"
+
+# mount code in /code before running tests
+CMD ["pytest", "/code/tests"]
