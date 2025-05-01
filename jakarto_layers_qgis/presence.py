@@ -143,7 +143,7 @@ class PresenceManager(QObject):
                 y=geom.asPoint().y(),
                 srid=PRESENCE_LAYER_SRID,
                 rotation=presence_point.rotation,
-                time=time(),
+                time=presence_point.time,
             )
             feature.setGeometry(geom)
             rotation_deg = -1 * presence_point.rotation * 180 / 3.141592
