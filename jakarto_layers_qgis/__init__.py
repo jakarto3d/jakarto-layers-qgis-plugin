@@ -37,6 +37,7 @@ def _sentry_init():
         "dsn": "https://b1b033649743ccd6ccf02813ca17e33b@o396741.ingest.us.sentry.io/4509248216694784",
         "before_send": _sentry_before_send,
         "in_app_include": ["jakarto_layers_qgis"],
+        "auto_enabling_integrations": False,
     }
 
     old_import_module = importlib.import_module
