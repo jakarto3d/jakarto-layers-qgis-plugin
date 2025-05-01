@@ -58,6 +58,7 @@ compile:
 # Package the plugin into a zip file
 package:
     #!/usr/bin/env bash
+    set -e
     just vendorize
     just compile
     rm -rf jakarto_layers_qgis.zip
