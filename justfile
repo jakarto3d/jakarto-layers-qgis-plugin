@@ -50,13 +50,13 @@ run-qgis:
 run-qgis-local-supabase:
     JAKARTO_LAYERS_SUPABASE_LOCAL=1 just run-qgis
 
-# Install dependencies in the `jakarto_layers_qgis_plugin/vendor` folder
+# Install dependencies in the `jakarto_layers_qgis/vendor` folder
 vendorize:
     #!/usr/bin/env bash
     . .venv/bin/activate && vendoring sync
     touch jakarto_layers_qgis/vendor/__init__.py
 
-# Compile the resources.qrc file (only necessary when it changed)
+# Compile the resources.qrc file
 compile:
     pyrcc5 jakarto_layers_qgis/ui/resources.qrc -o jakarto_layers_qgis/ui/resources_rc.py
 
