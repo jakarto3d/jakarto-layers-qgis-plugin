@@ -11,7 +11,7 @@ about=Access, visualize, and edit geospatial layers in both QGIS and Jakartowns 
     
     Jakarto is a provider of digital twin and asset inventory solutions, specializing in high-definition LiDAR and 360 imagery for creating precise digital twins. Their platform enables virtual surveying, asset management, and urban planning through comprehensive 3D mobile mapping data. Learn more at jakarto.com
 version=0.1.0
-qgisMinimumVersion=3.30
+qgisMinimumVersion=3.22
 author=David Caron
 icon=ui/icons/jakartowns-sync-36.png
 email=david.caron@jakarto.com
