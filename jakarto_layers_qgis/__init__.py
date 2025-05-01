@@ -57,6 +57,7 @@ def _sentry_init():
         {
             "qgis": Qgis.QGIS_VERSION,
             "python": platform.python_version(),
+            "system": platform.system(),
         }
     )
 
