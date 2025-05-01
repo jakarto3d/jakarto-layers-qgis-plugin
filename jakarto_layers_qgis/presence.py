@@ -1,5 +1,6 @@
+from dataclasses import dataclass
 from time import time
-from typing import Any, Optional
+from typing import Optional
 
 from PyQt5.QtCore import QObject, pyqtSignal
 from qgis.core import (
@@ -36,8 +37,10 @@ class PresenceManager(QObject):
     def __init__(self) -> None:
         super().__init__()
         self._presence_layer: Optional[QgsVectorLayer] = None
-        self._presence_states: dict[str, dict[str, Any]] = {}
-        self._last_presence_point: dict[str, tuple[QgsGeometry, float]] = {}
+        self._presence_states: dict[str, Optional[PresencePoint]] = {}
+        # _last_presence_point is to keep track of the last position that moved
+        # so we can center the view on it
+        self._last_presence_point: dict[str, PresencePoint] = {}
         self.center_view_on_position_update = False
 
         self.presence_update.connect(self._update_presence_layer)
@@ -46,7 +49,7 @@ class PresenceManager(QObject):
         def on_presence_join(key, curr_presences, joined_presences):
             for joined in joined_presences:
                 presence_client_id = joined["presence_client_id"]
-                self._presence_states.setdefault(presence_client_id, {})
+                self._presence_states.setdefault(presence_client_id, None)
 
         def on_presence_leave(key, curr_presences, left_presences):
             for left in left_presences:
@@ -62,12 +65,13 @@ class PresenceManager(QObject):
             presence_client_id = payload["presence_client_id"]
             if not all(k in payload for k in ["x", "y", "srid"]):
                 return
-            self._presence_states[presence_client_id] = {
-                "x": payload["x"],
-                "y": payload["y"],
-                "srid": payload["srid"],
-                "rotation": payload.get("rotation", 0),
-            }
+            self._presence_states[presence_client_id] = PresencePoint(
+                x=payload["x"],
+                y=payload["y"],
+                srid=payload["srid"],
+                rotation=payload.get("rotation", 0),
+                time=time(),
+            )
             self.presence_update.emit()
 
         await (
@@ -120,23 +124,29 @@ class PresenceManager(QObject):
         provider.truncate()
 
         features = []
-        for client_id, state in self._presence_states.items():
-            if not all(k in state for k in ["x", "y", "srid", "rotation"]):
+        for client_id, presence_point in self._presence_states.items():
+            if presence_point is None:
                 continue
             feature = QgsFeature()
-            point = QgsPointXY(state["x"], state["y"])
+            point = QgsPointXY(presence_point.x, presence_point.y)
             geom = QgsGeometry.fromPointXY(point)
-            if state["srid"] != PRESENCE_LAYER_SRID:
+            if presence_point.srid != PRESENCE_LAYER_SRID:
                 geom.transform(
                     QgsCoordinateTransform(
-                        QgsCoordinateReferenceSystem(state["srid"]),
+                        QgsCoordinateReferenceSystem(presence_point.srid),
                         QgsCoordinateReferenceSystem(PRESENCE_LAYER_SRID),
                         QgsProject.instance().transformContext(),
                     )
                 )
-            self._last_presence_point[client_id] = (geom, time())
+            self._last_presence_point[client_id] = PresencePoint(
+                x=geom.asPoint().x(),
+                y=geom.asPoint().y(),
+                srid=PRESENCE_LAYER_SRID,
+                rotation=presence_point.rotation,
+                time=time(),
+            )
             feature.setGeometry(geom)
-            rotation_deg = -1 * state["rotation"] * 180 / 3.141592
+            rotation_deg = -1 * presence_point.rotation * 180 / 3.141592
             feature.setAttributes([rotation_deg])
             features.append(feature)
 
@@ -152,22 +162,24 @@ class PresenceManager(QObject):
             return
         if not bool(self._last_presence_point):
             return
-        point_geom, _ = max(
-            self._last_presence_point.values(), key=lambda x: x[1]
-        )  # max by time
+        # max by time
+        presence_point: PresencePoint = max(
+            self._last_presence_point.values(), key=lambda x: x.time
+        )
+        geom = QgsGeometry.fromPointXY(QgsPointXY(presence_point.x, presence_point.y))
 
         # Transform point to map canvas CRS
         canvas_crs = iface.mapCanvas().mapSettings().destinationCrs()
-        transform_context = QgsProject.instance().transformContext()
-        point_geom.transform(
-            QgsCoordinateTransform(
-                QgsCoordinateReferenceSystem(PRESENCE_LAYER_SRID),
-                canvas_crs,
-                transform_context,
+        presence_point_crs = QgsCoordinateReferenceSystem(presence_point.srid)
+        if presence_point_crs != canvas_crs:
+            transform_context = QgsProject.instance().transformContext()
+            geom.transform(
+                QgsCoordinateTransform(
+                    presence_point_crs, canvas_crs, transform_context
+                )
             )
-        )
 
-        iface.mapCanvas().setCenter(point_geom.asPoint())
+        iface.mapCanvas().setCenter(geom.asPoint())
         iface.mapCanvas().refresh()
 
     def close(self) -> None:
@@ -181,3 +193,12 @@ class PresenceManager(QObject):
 
     def __del__(self) -> None:
         self.close()
+
+
+@dataclass
+class PresencePoint:
+    x: float
+    y: float
+    srid: int
+    rotation: float
+    time: float
