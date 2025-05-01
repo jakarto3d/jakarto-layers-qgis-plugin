@@ -132,6 +132,7 @@ class Plugin:
     def initGui(self) -> None:  # noqa N802
         self._panel = MainPanel()
         self.toolbar = iface.addToolBar("Jakarto Real-Time Layers")
+        self.toolbar.setObjectName("Jakarto Real-Time Layers")
 
         self.menu = QMenu("Jakarto Real-Time Layers")
         self.menu.setIcon(QIcon(":/resources/icons/jakartowns-sync-36.png"))
