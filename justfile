@@ -23,6 +23,11 @@ venv:
 test *args:
     .venv/bin/pytest tests {{ args }}
 
+# Run tests for QGIS 3.22 and python 3.9 in a docker container (requires X11)
+test-docker:
+    docker build -f tests/Dockerfile-3.22-py3.9 -t jakarto-layers-qgis-test-3.22 .
+    docker run -it --rm -v $(pwd):/code -v /tmp/.X11-unix:/tmp/.X11-unix -e DISPLAY=unix$DISPLAY jakarto-layers-qgis-test-3.22
+
 # Run tests with coverage
 coverage:
     .venv/bin/coverage run -m pytest tests
