@@ -234,5 +234,8 @@ RUN uv venv --system-site-packages --python /usr/bin/python3 \
 ENV PATH="/.venv/bin:${PATH}"
 ENV PYTHONDONTWRITEBYTECODE=1
 
+RUN useradd -m qgis
+USER qgis
+
 # mount code in /code before running tests
 CMD ["pytest", "/code/tests"]
