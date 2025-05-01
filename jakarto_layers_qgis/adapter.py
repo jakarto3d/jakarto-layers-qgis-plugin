@@ -18,7 +18,11 @@ from qgis.gui import QgisInterface
 from qgis.utils import iface
 
 from .constants import anon_key, realtime_url
-from .converters import qgis_layer_to_supabase_layer, qgis_to_supabase_feature
+from .converters import (
+    convert_geometry_type,
+    qgis_layer_to_supabase_layer,
+    qgis_to_supabase_feature,
+)
 from .layer import Layer
 from .logs import debug
 from .presence import PresenceManager
@@ -239,7 +243,7 @@ class Adapter(QObject):
         )
 
         supabase_features = []
-        feature_type = qgis_layer.geometryType().name  # type: ignore
+        feature_type = convert_geometry_type(qgis_layer.geometryType())
         attribute_names = [a.name() for a in qgis_layer.fields()]
         for qgis_feature in qgis_features:
             supabase_feature = qgis_to_supabase_feature(

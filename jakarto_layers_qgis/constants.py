@@ -49,17 +49,6 @@ if not verify_ssl:
     real_connect = client.connect
     client.connect = patched_connect
 
-
-def get_geometry_type_str(geometry_type) -> str:
-    """To support QGIS < 3.26 where Qgis.GeometryType is not available."""
-    value = geometry_type.value
-    return {
-        0: "point",
-        1: "line",
-        2: "polygon",
-    }.get(value, "unknown")
-
-
 geometry_types = {
     "point": "Point",
     "line": "LineString",

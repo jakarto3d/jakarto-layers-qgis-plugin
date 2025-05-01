@@ -5,18 +5,15 @@ from datetime import date, datetime, time
 from typing import TYPE_CHECKING, Any, Optional
 
 from qgis.core import (
+    Qgis,
     QgsFeature,
-    QgsGeometry,
     QgsPoint,
     QgsVectorLayer,
+    QgsWkbTypes,
 )
 from qgis.PyQt.QtCore import QDate, QDateTime, QVariant
 
-from .constants import (
-    geometry_types,
-    get_geometry_type_str,
-    qmetatype_to_python,
-)
+from .constants import geometry_types, qmetatype_to_python
 from .supabase_models import LayerAttribute, SupabaseFeature, SupabaseLayer
 
 if TYPE_CHECKING:
@@ -50,7 +47,7 @@ def qgis_to_supabase_feature(
 
     geometry = feature.geometry()
     if feature_type is None:
-        feature_type = geometry.type().name.lower()  # type: ignore
+        feature_type = convert_geometry_type(geometry.type())
     else:
         feature_type = feature_type.lower()
     if feature_type != "point":
@@ -109,7 +106,7 @@ def supabase_to_qgis_feature(feature: SupabaseFeature, layer: Layer) -> QgsFeatu
     if layer.geometry_type == "point":
         x, y, z = feature.geom["coordinates"]
         qgis_feature = QgsFeature()
-        qgis_feature.setGeometry(QgsGeometry.fromPoint(QgsPoint(x, y, z)))
+        qgis_feature.setGeometry(QgsPoint(x, y, z))
         attrs = [get_value(name) for name in name_to_type]
         qgis_feature.setAttributes(attrs)
     else:
@@ -146,7 +143,7 @@ def qgis_layer_to_supabase_layer(
     parent_id: Optional[str] = None,
     temporary_layer: bool = False,
 ) -> SupabaseLayer:
-    if get_geometry_type_str(qgis_layer.geometryType()) != "point":
+    if convert_geometry_type(qgis_layer.geometryType()) != "point":
         raise ValueError("Only point layers are supported")
 
     if supabase_layer_id is None:
@@ -167,3 +164,22 @@ def qgis_layer_to_supabase_layer(
         parent_id=parent_id,
         temporary=temporary_layer,
     )
+
+
+def convert_geometry_type(qgis_geometry_type) -> str:
+    try:
+        if isinstance(qgis_geometry_type, Qgis.GeometryType):
+            return qgis_geometry_type.name.lower()  # type: ignore
+    except AttributeError:
+        pass
+    try:
+        if isinstance(qgis_geometry_type, QgsWkbTypes.GeometryType):
+            to_int = int(qgis_geometry_type)
+            return {
+                0: "point",
+                1: "line",
+                2: "polygon",
+            }[to_int]
+    except (AttributeError, ValueError, KeyError):
+        pass
+    raise ValueError(f"Invalid geometry type: {type(qgis_geometry_type)}")

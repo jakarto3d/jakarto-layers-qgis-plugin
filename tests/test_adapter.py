@@ -9,17 +9,16 @@ from pytest_qgis import utils as pytest_qgis_utils
 from qgis.core import (
     QgsFeature,
     QgsField,
-    QgsGeometry,
     QgsPoint,
     QgsProject,
     QgsVectorLayer,
 )
-from qgis.PyQt.QtCore import QDate, QMetaType, QPoint, Qt
+from qgis.PyQt.QtCore import QDate, QPoint, Qt
 from qgis.PyQt.QtWidgets import QAction, QDialog, QInputDialog, QMenu, QMessageBox
 
 import jakarto_layers_qgis.plugin
 from jakarto_layers_qgis import supabase_postgrest
-from jakarto_layers_qgis.constants import supabase_url
+from jakarto_layers_qgis.constants import python_to_qmetatype, supabase_url
 from jakarto_layers_qgis.layer import Layer
 from jakarto_layers_qgis.supabase_models import LayerAttribute
 from jakarto_layers_qgis.supabase_session import SupabaseSession
@@ -289,7 +288,7 @@ def test_rename_layer(plugin, add_layer: Layer, mock_session, monkeypatch):
 def test_add_feature_in_qgis(add_layer: Layer, mock_session):
     # given
     qgis_feature = QgsFeature()
-    qgis_feature.setGeometry(QgsGeometry.fromPoint(QgsPoint(243778, 5178023, 29)))
+    qgis_feature.setGeometry(QgsPoint(243778, 5178023, 29))
     attrs = first_point_attrs(add_layer.attributes)
     qgis_feature.setAttributes(attrs)
 
@@ -350,7 +349,7 @@ def test_add_attribute_in_qgis(add_layer: Layer, mock_session):
     attribs.append({"name": "new_attr", "type": "str"})
     layer = add_layer.qgis_layer
     layer.startEditing()
-    layer.addAttribute(QgsField("new_attr", QMetaType.QString))
+    layer.addAttribute(QgsField("new_attr", python_to_qmetatype["str"]))
     layer.commitChanges()
 
     # then

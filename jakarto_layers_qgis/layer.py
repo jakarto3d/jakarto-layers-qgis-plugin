@@ -315,7 +315,7 @@ class Layer:
                     f"Geometry type {feature.geom['type']} not implemented"
                 )
             x, y, z = feature.geom["coordinates"]
-            change_geometry = QgsGeometry.fromPoint(QgsPoint(x, y, z))
+            change_geometry = QgsGeometry(QgsPoint(x, y, z))
 
         if change_attributes:
             self.qgis_layer.dataProvider().changeAttributeValues(
