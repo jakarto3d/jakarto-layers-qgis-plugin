@@ -7,6 +7,7 @@ from typing import Optional
 import requests
 
 from .constants import anon_key, auth_url, verify_ssl
+from .vendor import sentry_sdk
 
 
 class SupabaseSession:
@@ -32,6 +33,7 @@ class SupabaseSession:
             raise
         self._email = email
         self._password = password
+        sentry_sdk.set_user({"email": self._email})
         return True
 
     @property

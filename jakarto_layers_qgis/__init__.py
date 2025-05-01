@@ -1,6 +1,9 @@
 import importlib
+import platform
 import traceback
 from pathlib import Path
+
+from qgis.core import Qgis
 
 
 def _sentry_before_send(event, hint):
@@ -48,6 +51,13 @@ def _sentry_init():
     sentry_sdk.init(**kwargs)
 
     importlib.import_module = old_import_module
+
+    sentry_sdk.set_tags(
+        {
+            "qgis": Qgis.QGIS_VERSION,
+            "python": platform.python_version(),
+        }
+    )
 
 
 def classFactory(_):
