@@ -232,6 +232,7 @@ RUN uv venv --system-site-packages --python /usr/bin/python3 \
     && uv pip install -r requirements-dev.txt
 
 ENV PATH="/.venv/bin:${PATH}"
+ENV PYTHONDONTWRITEBYTECODE=1
 
 # mount code in /code before running tests
 CMD ["pytest", "/code/tests"]
