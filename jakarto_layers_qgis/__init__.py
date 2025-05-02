@@ -27,7 +27,7 @@ def _sentry_before_send(event, hint):
 def _sentry_init():
     # Detect if we are running in dev. If so, don't initialize sentry.
     if (Path(__file__).parent.parent / "pyproject.toml").exists():
-        print("Running in dev, skipping sentry init")
+        # Running in dev, skipping sentry init
         return
 
     from jakarto_layers_qgis.vendor import sentry_sdk
