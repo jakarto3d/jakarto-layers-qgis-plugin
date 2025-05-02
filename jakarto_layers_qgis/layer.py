@@ -301,6 +301,7 @@ class Layer:
 
         change_attributes = {}
         change_geometry = None
+        qgis_attributes = qgis_feature.attributes()
 
         for attr_name, value in feature.attributes.items():
             field_idx = self.qgis_layer.fields().indexOf(attr_name)
@@ -308,14 +309,25 @@ class Layer:
                 value = supabase_attribute_to_qgis_attribute(
                     value, attr_name_to_type[attr_name]
                 )
-                change_attributes[field_idx] = value
+                if qgis_attributes[field_idx] != value:
+                    change_attributes[field_idx] = value
+
         if feature.geom:
             if feature.geom["type"] != "Point":
                 raise ValueError(
                     f"Geometry type {feature.geom['type']} not implemented"
                 )
             x, y, z = feature.geom["coordinates"]
-            change_geometry = QgsGeometry(QgsPoint(x, y, z))
+            qgis_pt = qgis_feature.geometry().vertexAt(0)
+            qx, qy, qz = qgis_pt.x(), qgis_pt.y(), qgis_pt.z()
+
+            # Compare coordinates with 8 decimal places precision
+            if (
+                round(x, 8) != round(qx, 8)
+                or round(y, 8) != round(qy, 8)
+                or round(z, 8) != round(qz, 8)
+            ):
+                change_geometry = QgsGeometry(QgsPoint(x, y, z))
 
         if change_attributes:
             self.qgis_layer.dataProvider().changeAttributeValues(
@@ -325,8 +337,9 @@ class Layer:
             self.qgis_layer.dataProvider().changeGeometryValues(
                 {qgis_id: change_geometry}
             )
-        self.qgis_layer.triggerRepaint()
-        self.qgis_layer.reload()
+        if change_attributes or change_geometry:
+            self.qgis_layer.triggerRepaint()
+            self.qgis_layer.reload()
 
     def on_realtime_delete(self, supabase_feature_id: str) -> bool:
         """Called when a delete message is received from the realtime server."""
