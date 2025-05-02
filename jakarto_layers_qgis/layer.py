@@ -373,3 +373,10 @@ class Layer:
                     tree_view.removeIndicator(layer_node, indicator)
                 if visible:
                     tree_view.addIndicator(layer_node, ind)
+
+    def __repr__(self) -> str:
+        return (
+            f"Layer(name={self.name}, "
+            f"supabase_layer_id={self.supabase_layer_id}, "
+            f"temporary={self.temporary})"
+        )

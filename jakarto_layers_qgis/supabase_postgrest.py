@@ -36,6 +36,7 @@ class Postgrest:
                     LayerAttribute.from_json(a) for a in (layer["attributes"] or [])
                 ],
                 parent_id=layer["parent_id"],
+                temporary=layer["temporary"],
             )
             for layer in response.json()
         ]
