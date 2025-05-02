@@ -196,8 +196,10 @@ class Plugin:
     def on_current_layer_changed(self, layer: Optional[QgsMapLayer] = None) -> None:
         if layer is None:
             layer = iface.activeLayer()
-        syncable = self.is_layer_syncable(layer)
-        if self._sync_layer_action is not None:
+        if self._sync_layer_action is not None and not sip.isdeleted(
+            self._sync_layer_action
+        ):
+            syncable = self.is_layer_syncable(layer)
             self._sync_layer_action.setEnabled(syncable)
 
     def show_layer_context_menu(self, position):
@@ -267,6 +269,8 @@ class Plugin:
         for action in self.actions:
             if not sip.isdeleted(action):
                 action.deleteLater()
+
+        iface.currentLayerChanged.disconnect(self.on_current_layer_changed)
 
     def setup_auth(self) -> bool:
         return auth.setup_auth(check_function=self.adapter.setup_auth)
