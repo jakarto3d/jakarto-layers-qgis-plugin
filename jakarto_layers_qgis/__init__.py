@@ -31,15 +31,21 @@ def _sentry_init():
         return
 
     from jakarto_layers_qgis.vendor import sentry_sdk
+    from jakarto_layers_qgis.vendor.sentry_sdk.integrations.threading import (
+        ThreadingIntegration,
+    )
 
-    # to ignore type errors in init()
+    # to ignore type errors in sentry_sdk.init()
     kwargs = {
         "dsn": "https://b1b033649743ccd6ccf02813ca17e33b@o396741.ingest.us.sentry.io/4509248216694784",
         "before_send": _sentry_before_send,
         "in_app_include": ["jakarto_layers_qgis"],
         "auto_enabling_integrations": False,
+        # disable threading integration, it conflicts with something in QGIS
+        "disabled_integrations": [ThreadingIntegration],
     }
 
+    # patch for when importing sentry_sdk integrations
     old_import_module = importlib.import_module
 
     def _import_module(module_name):
@@ -51,6 +57,7 @@ def _sentry_init():
 
     sentry_sdk.init(**kwargs)
 
+    # restore original import_module
     importlib.import_module = old_import_module
 
     sentry_sdk.set_tags(
