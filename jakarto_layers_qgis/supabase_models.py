@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import asdict, dataclass
 from datetime import date, datetime
 from typing import Any, Optional
@@ -39,6 +40,10 @@ class SupabaseFeature:
         return data
 
     def _jsonize_value(self, value: Any) -> Any:
+        if isinstance(value, float):
+            if math.isnan(value) or math.isinf(value):
+                # postgrest doesn't support nan or inf in json
+                value = None
         if isinstance(value, (int, str, float, bool)):
             return value
         elif isinstance(value, (list, tuple)):
