@@ -71,3 +71,8 @@ package:
     find jakarto_layers_qgis -type d -name "__pycache__" -exec rm -rf {} +
     zip -r jakarto_layers_qgis.zip jakarto_layers_qgis
     echo "Package created: jakarto_layers_qgis.zip"
+
+# Bump the version of the project
+[no-exit-message]
+bump-version *args:
+    uvx bump2version {{ args }}

@@ -5,6 +5,8 @@ from pathlib import Path
 
 from qgis.core import Qgis
 
+__version__ = "0.0.1"
+
 
 def _sentry_before_send(event, hint):
     try:
@@ -43,6 +45,7 @@ def _sentry_init():
         "auto_enabling_integrations": False,
         # disable threading integration, it conflicts with something in QGIS
         "disabled_integrations": [ThreadingIntegration],
+        "release": __version__,
     }
 
     # patch for when importing sentry_sdk integrations
