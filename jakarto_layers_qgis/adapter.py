@@ -4,6 +4,7 @@ import asyncio
 import threading
 import traceback
 import uuid
+from collections import defaultdict
 from itertools import chain
 from typing import Any, Callable, Optional, Union
 
@@ -42,7 +43,11 @@ iface: QgisInterface
 
 
 class Adapter(QObject):
-    realtime_event_received = pyqtSignal(dict)  # Signal for realtime events
+    realtime_event_received = pyqtSignal(
+        list,  # list[SupabaseInsertMessage]
+        list,  # list[SupabaseUpdateMessage]
+        list,  # list[SupabaseDeleteMessage]
+    )  # Signal for realtime events
 
     def __init__(self) -> None:
         super().__init__()
@@ -418,6 +423,21 @@ class Adapter(QObject):
 
     def start_realtime(self) -> None:
         def _thread_func() -> None:
+            insert_messages = []
+            update_messages = []
+            delete_messages = []
+
+            def _parse_message(message: dict) -> None:
+                message = parse_message(message)
+                if message is None:
+                    return
+                if isinstance(message, SupabaseInsertMessage):
+                    insert_messages.append(message)
+                elif isinstance(message, SupabaseUpdateMessage):
+                    update_messages.append(message)
+                elif isinstance(message, SupabaseDeleteMessage):
+                    delete_messages.append(message)
+
             async def _run_realtime():
                 self._realtime = AsyncRealtimeClient(realtime_url, token=anon_key)
                 await self._realtime.connect()
@@ -427,7 +447,7 @@ class Adapter(QObject):
                     .on_postgres_changes(
                         "*",
                         table="points",
-                        callback=self.realtime_event_received.emit,
+                        callback=_parse_message,
                     )
                     .subscribe()
                 )
@@ -447,7 +467,16 @@ class Adapter(QObject):
                 await self._presence_manager.subscribe_channel(channel)
 
                 while not self._realtime_thread_event.is_set():
-                    await asyncio.sleep(0.1)
+                    await asyncio.sleep(0.25)
+                    if insert_messages or update_messages or delete_messages:
+                        self.realtime_event_received.emit(
+                            list(insert_messages),
+                            list(update_messages),
+                            list(delete_messages),
+                        )
+                        insert_messages.clear()
+                        update_messages.clear()
+                        delete_messages.clear()
 
             try:
                 asyncio.run(_run_realtime())
@@ -461,27 +490,47 @@ class Adapter(QObject):
             thread.start()
 
     def on_supabase_realtime_event(
-        self, event_data: dict, only_print_errors: bool = True
+        self,
+        insert_messages: list,  # list[SupabaseInsertMessage]
+        update_messages: list,  # list[SupabaseUpdateMessage]
+        delete_messages: list,  # list[SupabaseDeleteMessage]
+        only_print_errors: bool = True,
     ) -> None:
         """Handle realtime events in the main thread."""
         try:
-            message = parse_message(event_data)
-            if message is None:
-                return
-            if isinstance(message, SupabaseInsertMessage):
-                layer_id = message.record.layer_id
-                if layer_id not in self._loaded_layers:
-                    return
-                self._loaded_layers[layer_id].on_realtime_insert(message.record)
-            elif isinstance(message, SupabaseUpdateMessage):
-                layer_id = message.record.layer_id
-                if layer_id not in self._loaded_layers:
-                    return
-                self._loaded_layers[layer_id].on_realtime_update(message.record)
-            elif isinstance(message, SupabaseDeleteMessage):
-                for layer in self._loaded_layers.values():
-                    if layer.on_realtime_delete(message.old_record_id):
-                        break
+            if insert_messages:
+                inserts_by_layer_id: dict[str, list] = defaultdict(list)
+                for message in insert_messages:
+                    if message.record.layer_id not in self._loaded_layers:
+                        continue
+                    inserts_by_layer_id[message.record.layer_id].append(message.record)
+
+                for layer_id, records in inserts_by_layer_id.items():
+                    self._loaded_layers[layer_id].on_realtime_insert(records)
+
+            if update_messages:
+                updates_by_layer_id: dict[str, list] = defaultdict(list)
+                for message in update_messages:
+                    if message.record.layer_id not in self._loaded_layers:
+                        continue
+                    updates_by_layer_id[message.record.layer_id].append(message.record)
+
+                for layer_id, records in updates_by_layer_id.items():
+                    self._loaded_layers[layer_id].on_realtime_update(records)
+
+            if delete_messages:
+                deletes_by_layer_id: dict[str, list] = defaultdict(list)
+                for message in delete_messages:
+                    supabase_id = message.old_record_id
+                    for layer in self._loaded_layers.values():
+                        if layer.get_qgis_feature_id(supabase_id):
+                            deletes_by_layer_id[layer.supabase_layer_id].append(
+                                supabase_id
+                            )
+
+                for layer_id, supabase_ids in deletes_by_layer_id.items():
+                    self._loaded_layers[layer_id].on_realtime_delete(supabase_ids)
+
         except Exception:
             if only_print_errors:
                 traceback.print_exc()

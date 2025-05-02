@@ -20,6 +20,7 @@ import jakarto_layers_qgis.plugin
 from jakarto_layers_qgis import supabase_postgrest
 from jakarto_layers_qgis.constants import python_to_qmetatype, supabase_url
 from jakarto_layers_qgis.layer import Layer
+from jakarto_layers_qgis.supabase_events import parse_message
 from jakarto_layers_qgis.supabase_models import LayerAttribute
 from jakarto_layers_qgis.supabase_session import SupabaseSession
 from jakarto_layers_qgis.ui.create_sub_layer import CreateSubLayerDialog
@@ -386,9 +387,12 @@ def test_add_feature_in_supabase(plugin, add_layer: Layer):
     insert_event = get_response_file("supabase_insert_event.json")
     supabase_id = insert_event["data"]["record"]["id"]
     assert add_layer.qgis_layer.featureCount() == 9
+    message = parse_message(insert_event)
 
     # when
-    plugin.adapter.on_supabase_realtime_event(insert_event, only_print_errors=False)
+    plugin.adapter.on_supabase_realtime_event(
+        [message], [], [], only_print_errors=False
+    )
 
     # then
     assert add_layer.qgis_layer.featureCount() == 10
@@ -400,9 +404,12 @@ def test_update_feature_in_supabase(plugin, add_layer: Layer):
     update_event = get_response_file("supabase_update_event.json")
     supabase_id = update_event["data"]["record"]["id"]
     assert add_layer.qgis_layer.featureCount() == 9
+    message = parse_message(update_event)
 
     # when
-    plugin.adapter.on_supabase_realtime_event(update_event, only_print_errors=False)
+    plugin.adapter.on_supabase_realtime_event(
+        [], [message], [], only_print_errors=False
+    )
 
     # then
     assert add_layer.qgis_layer.featureCount() == 9
@@ -418,9 +425,11 @@ def test_delete_feature_in_supabase(plugin, add_layer: Layer):
     delete_event = get_response_file("supabase_delete_event.json")
     supabase_id = delete_event["data"]["old_record"]["id"]
     assert add_layer.qgis_layer.featureCount() == 9
-
+    message = parse_message(delete_event)
     # when
-    plugin.adapter.on_supabase_realtime_event(delete_event, only_print_errors=False)
+    plugin.adapter.on_supabase_realtime_event(
+        [], [], [message], only_print_errors=False
+    )
 
     # then
     assert add_layer.qgis_layer.featureCount() == 8

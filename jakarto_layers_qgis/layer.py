@@ -209,6 +209,14 @@ class Layer:
             return None
         return feature
 
+    def get_qgis_features(self, qgis_ids: list[int]) -> list[Union[QgsFeature, None]]:
+        by_id = {}
+        for feature in self.qgis_layer.getFeatures(qgis_ids):
+            if not feature.isValid():
+                continue
+            by_id[feature.id()] = feature
+        return [by_id.get(id_) for id_ in qgis_ids]
+
     def on_event_added(self, layer_id: str, features: Iterable[QgsFeature]) -> None:
         """Called when features are added to the layer."""
         # remove echo of supabase_insert event
@@ -264,105 +272,143 @@ class Layer:
         ]
         self._layer_attributes_modified = True
 
-    def on_realtime_insert(self, feature: SupabaseFeature) -> None:
+    def on_realtime_insert(self, features: list[SupabaseFeature]) -> None:
         """Called when an insert message is received from the realtime server."""
         if not self._qgis_layer_signals_initialized:
             return
-        if feature.id in self._supabase_feature_id_to_qgis_id:
-            return  # echo of a qgis_insert event
 
-        debug(f"Supabase InsertMessage: {feature.id}")
+        # remove echo of a qgis_insert event
+        features = [
+            f for f in features if f.id not in self._supabase_feature_id_to_qgis_id
+        ]
+        if not features:
+            return
 
-        qgis_feature = supabase_to_qgis_feature(feature, self)
-        self.qgis_layer.dataProvider().addFeature(qgis_feature)
-        self.add_feature_id(qgis_feature.id(), feature.id)
+        debug(f"Supabase InsertMessage: {', '.join(f.id for f in features)}")
+
+        qgis_features = [
+            supabase_to_qgis_feature(feature, self) for feature in features
+        ]
+        self.qgis_layer.dataProvider().addFeatures(qgis_features)
+        for qgis_feature, feature in zip(qgis_features, features):
+            self.add_feature_id(qgis_feature.id(), feature.id)
+
         self.qgis_layer.triggerRepaint()
         # needed to refresh attribute table
         self.qgis_layer.reload()
 
-    def on_realtime_update(self, feature: SupabaseFeature) -> None:
+    def on_realtime_update(self, features: list[SupabaseFeature]) -> None:
         """Called when an update message is received from the realtime server."""
         if not self._qgis_layer_signals_initialized:
             return
-        if feature.id in self.manually_updated_supabase_ids:
-            self.manually_updated_supabase_ids.remove(feature.id)
-            return  # echo of a qgis_update event
 
-        debug(f"Supabase UpdateMessage: {feature.id}")
+        # remove echo of a qgis_update event
+        to_update = []
+        for feature in features:
+            if feature.id in self.manually_updated_supabase_ids:
+                self.manually_updated_supabase_ids.remove(feature.id)
+                continue
+            if feature.id not in self._supabase_feature_id_to_qgis_id:
+                continue
+            to_update.append(feature)
+        if not to_update:
+            return
+        features = to_update
 
-        qgis_id = self._supabase_feature_id_to_qgis_id.get(feature.id)
-        if qgis_id is None:
-            return
-        qgis_feature = self.get_qgis_feature(qgis_id)
-        if qgis_feature is None:
-            return
+        debug(f"Supabase UpdateMessage: {', '.join(f.id for f in features)}")
+
+        qgis_ids = [self._supabase_feature_id_to_qgis_id[f.id] for f in features]
+        qgis_features = self.get_qgis_features(qgis_ids)
 
         attr_name_to_type = {a.name: a.type for a in self.attributes}
 
-        change_attributes = {}
-        change_geometry = None
-        qgis_attributes = qgis_feature.attributes()
+        change_attributes_by_qgis_id: dict[int, dict[int, Any]] = {}
+        change_geometry_by_qgis_id: dict[int, QgsGeometry] = {}
 
-        for attr_name, value in feature.attributes.items():
-            field_idx = self.qgis_layer.fields().indexOf(attr_name)
-            if field_idx >= 0:
-                value = supabase_attribute_to_qgis_attribute(
-                    value, attr_name_to_type[attr_name]
-                )
-                if qgis_attributes[field_idx] != value:
-                    change_attributes[field_idx] = value
+        for qgis_feature, feature in zip(qgis_features, features):
+            if qgis_feature is None:
+                continue
+            change_attributes = {}
+            change_geometry = None
 
-        if feature.geom:
-            if feature.geom["type"] != "Point":
-                raise ValueError(
-                    f"Geometry type {feature.geom['type']} not implemented"
-                )
-            x, y, z = feature.geom["coordinates"]
-            qgis_pt = qgis_feature.geometry().vertexAt(0)
-            qx, qy, qz = qgis_pt.x(), qgis_pt.y(), qgis_pt.z()
+            qgis_attributes = qgis_feature.attributes()
 
-            # Compare coordinates with 8 decimal places precision
-            if (
-                round(x, 8) != round(qx, 8)
-                or round(y, 8) != round(qy, 8)
-                or round(z, 8) != round(qz, 8)
-            ):
-                change_geometry = QgsGeometry(QgsPoint(x, y, z))
+            for attr_name, value in feature.attributes.items():
+                field_idx = self.qgis_layer.fields().indexOf(attr_name)
+                if field_idx >= 0:
+                    value = supabase_attribute_to_qgis_attribute(
+                        value, attr_name_to_type[attr_name]
+                    )
+                    if qgis_attributes[field_idx] != value:
+                        change_attributes[field_idx] = value
 
-        if change_attributes:
+            if change_attributes:
+                change_attributes_by_qgis_id[qgis_feature.id()] = change_attributes
+
+            if feature.geom:
+                if feature.geom["type"] != "Point":
+                    raise ValueError(
+                        f"Geometry type {feature.geom['type']} not implemented"
+                    )
+                x, y, z = feature.geom["coordinates"]
+                qgis_pt = qgis_feature.geometry().vertexAt(0)
+                qx, qy, qz = qgis_pt.x(), qgis_pt.y(), qgis_pt.z()
+
+                # Compare coordinates with 8 decimal places precision
+                if (
+                    round(x, 8) != round(qx, 8)
+                    or round(y, 8) != round(qy, 8)
+                    or round(z, 8) != round(qz, 8)
+                ):
+                    change_geometry = QgsGeometry(QgsPoint(x, y, z))
+
+            if change_geometry:
+                change_geometry_by_qgis_id[qgis_feature.id()] = change_geometry
+
+        if change_attributes_by_qgis_id:
             self.qgis_layer.dataProvider().changeAttributeValues(
-                {qgis_id: change_attributes}
+                change_attributes_by_qgis_id
             )
-        if change_geometry:
+        if change_geometry_by_qgis_id:
             self.qgis_layer.dataProvider().changeGeometryValues(
-                {qgis_id: change_geometry}
+                change_geometry_by_qgis_id
             )
-        if change_attributes or change_geometry:
+        # only update view if there are changes
+        if change_attributes_by_qgis_id or change_geometry_by_qgis_id:
             self.qgis_layer.triggerRepaint()
             self.qgis_layer.reload()
 
-    def on_realtime_delete(self, supabase_feature_id: str) -> bool:
+    def on_realtime_delete(self, supabase_feature_ids: list[str]) -> bool:
         """Called when a delete message is received from the realtime server."""
         if not self._qgis_layer_signals_initialized:
             return False
-        qgis_id = self._supabase_feature_id_to_qgis_id.get(supabase_feature_id)
-        if qgis_id is None:
+        id_pairs_with_none = [
+            (id_, self._supabase_feature_id_to_qgis_id.get(id_))
+            for id_ in supabase_feature_ids
+        ]
+        id_pairs: list[tuple[str, int]] = [
+            p for p in id_pairs_with_none if p[1] is not None
+        ]
+        if not id_pairs:
             return False  # echo of a qgis_delete event
 
-        debug(f"Supabase DeleteMessage: {supabase_feature_id}")
+        debug(f"Supabase DeleteMessage: {', '.join(supabase_feature_ids)}")
 
         try:
             # remove from those dicts before deleting the feature
             # to avoid infinite loop when on_event_removed is called
-            self._supabase_feature_id_to_qgis_id.pop(supabase_feature_id, None)
-            self._qgis_feature_id_to_supabase_id.pop(qgis_id, None)
-            self.qgis_layer.dataProvider().deleteFeatures([qgis_id])
+            for supabase_feature_id, qgis_id in id_pairs:
+                self._supabase_feature_id_to_qgis_id.pop(supabase_feature_id, None)
+                self._qgis_feature_id_to_supabase_id.pop(qgis_id, None)
+            qgis_ids_to_delete = [p[1] for p in id_pairs]
+            self.qgis_layer.dataProvider().deleteFeatures(qgis_ids_to_delete)
             self.qgis_layer.triggerRepaint()
             self.qgis_layer.reload()
-        except:
+        except Exception:
             # restore the dicts
-            self._supabase_feature_id_to_qgis_id[supabase_feature_id] = qgis_id
-            self._qgis_feature_id_to_supabase_id[qgis_id] = supabase_feature_id
+            for supabase_feature_id, qgis_id in id_pairs:
+                self._supabase_feature_id_to_qgis_id[supabase_feature_id] = qgis_id
+                self._qgis_feature_id_to_supabase_id[qgis_id] = supabase_feature_id
             raise
 
         return True
