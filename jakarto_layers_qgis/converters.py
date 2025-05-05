@@ -167,6 +167,16 @@ def qgis_layer_to_supabase_layer(
 
 
 def convert_geometry_type(qgis_geometry_type) -> str:
+    """Convert a QGIS geometry type to a string.
+
+    Support older QGIS versions too.
+
+    Args:
+        qgis_geometry_type: The QGIS geometry type to convert.
+
+    Returns:
+        One of "point", "line", "polygon", "unknown".
+    """
     try:
         if isinstance(qgis_geometry_type, Qgis.GeometryType):
             return qgis_geometry_type.name.lower()  # type: ignore
@@ -182,4 +192,4 @@ def convert_geometry_type(qgis_geometry_type) -> str:
             }[to_int]
     except (AttributeError, ValueError, KeyError):
         pass
-    raise ValueError(f"Invalid geometry type: {type(qgis_geometry_type)}")
+    return "unknown"
