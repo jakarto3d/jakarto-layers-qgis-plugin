@@ -16,6 +16,8 @@ from qgis.gui import QgisInterface, QgsLayerTreeViewIndicator
 from qgis.PyQt.QtGui import QIcon
 from qgis.utils import iface
 
+from jakarto_layers_qgis.vendor import sentry_sdk
+
 from .constants import geometry_types, python_to_qmetatype, qmetatype_to_python
 from .converters import supabase_attribute_to_qgis_attribute, supabase_to_qgis_feature
 from .logs import debug
@@ -197,9 +199,9 @@ class Layer:
             return
 
         self.commit_callback(
-            self,
-            self._qgis_events,
-            self._layer_attributes_modified,
+            layer=self,
+            events=self._qgis_events,
+            layer_attributes_modified=self._layer_attributes_modified,
         )
         self._reset_edits()
 
@@ -289,9 +291,37 @@ class Layer:
         qgis_features = [
             supabase_to_qgis_feature(feature, self) for feature in features
         ]
-        self.qgis_layer.dataProvider().addFeatures(qgis_features)
-        for qgis_feature, feature in zip(qgis_features, features):
-            self.add_feature_id(qgis_feature.id(), feature.id)
+        success, new_features = self.qgis_layer.dataProvider().addFeatures(
+            qgis_features
+        )
+        if not success:
+            sentry_sdk.capture_message(
+                "Failed to add features to layer",
+                level="error",
+                extra={
+                    "first_feature": features[0].to_json(),
+                    "layer": self.supabase_layer_id,
+                },
+            )
+            return
+        for new_feature, feature in zip(new_features, features):
+            self.add_feature_id(new_feature.id(), feature.id)
+
+        if self.temporary:
+            # Some data providers have default values or
+            # triggers that can change data after insert.
+            # We only check for attributes, not geometry changes.
+            self.qgis_layer.dataProvider().flushBuffer()
+            modified_fids = []
+            for qgis_feature, new_feature in zip(qgis_features, new_features):
+                if qgis_feature.attributes() != new_feature.attributes():
+                    modified_fids.append(new_feature.id())
+            if modified_fids:
+                self.commit_callback(
+                    layer=self,
+                    events=[QGISUpdateEvent(modified_fids)],
+                    layer_attributes_modified=False,
+                )
 
         self.qgis_layer.triggerRepaint()
         # needed to refresh attribute table
