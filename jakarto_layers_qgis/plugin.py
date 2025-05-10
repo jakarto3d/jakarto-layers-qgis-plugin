@@ -43,30 +43,114 @@ HERE = Path(__file__).parent
 
 
 class Plugin:
-    """QGIS Plugin Implementation."""
+    menu: QMenu = None
+    toolbar: QToolBar = None
+    panel: MainPanel = None
+    sync_layer_action: QAction = None
 
     def __init__(self) -> None:
-        self.actions: list[QAction] = []
-        self.menu: Optional[QMenu] = None
-        self.toolbar: Optional[QToolBar] = None
-        self._panel: Optional[MainPanel] = None
-
-        self._show_layers_action = None
-        self._sync_layer_action = None
+        self._actions: list[QAction] = []
+        self._signals: list = []
 
         self._adapter = None
 
-    @property
-    def panel(self) -> MainPanel:
-        if self._panel is None:
-            raise RuntimeError("Panel is not loaded")
-        return self._panel
+    def initGui(self) -> None:  # noqa N802
+        self.toolbar = iface.addToolBar("Jakarto Real-Time Layers")
+        self.toolbar.setObjectName("Jakarto Real-Time Layers")
+        self.menu = QMenu("Jakarto Real-Time Layers")
+        self.menu.setIcon(QIcon(":/resources/icons/jakartowns-sync-36.png"))
+
+        self._setup_layers_panel()
+
+        # workaround for WebMenu
+        temp_action = QAction()
+        iface.addPluginToWebMenu("Jakarto Layers", temp_action)
+        iface.webMenu().addMenu(self.menu)
+        iface.removePluginWebMenu("Jakarto Layers", temp_action)
+
+        self.connect_signal(QgsProject.instance().layersRemoved, self.on_layers_removed)
+        self.connect_signal(iface.currentLayerChanged, self.on_current_layer_changed)
+
+        self.add_action(
+            ":/resources/icons/jakartowns-sync-36.png",
+            text="Sync active layer with Jakartowns",
+            callback=self.sync_layer_with_jakartowns,
+            parent=iface.mainWindow(),
+        )
+        self.add_action(
+            ":/resources/icons/layer-solid-36.png",
+            text="Jakarto Real-Time Layers list",
+            callback=self.show_layers_list,
+            parent=iface.mainWindow(),
+        )
+        self.on_current_layer_changed()
+
+        self.remove_all_presence_layers()
+
+        if hasattr(iface, "projectRead"):
+            # this is not available in tests
+            self.connect_signal(iface.projectRead, self.remove_all_presence_layers)
+
+    def unload(self) -> None:
+        """Removes the plugin menu item and icon from QGIS GUI."""
+
+        self.disconnect_signals()
+
+        if self._adapter is not None:
+            self.adapter.close()
+            self._adapter = None
+        if self.panel is not None and not sip.isdeleted(self.panel):
+            self.panel.close()
+            self.panel = None
+        for action in self._actions:
+            if not sip.isdeleted(action):
+                action.deleteLater()
+        self._actions.clear()
+        if self.menu is not None and not sip.isdeleted(self.menu):
+            self.menu.deleteLater()
+            self.menu = None
+        if self.toolbar is not None and not sip.isdeleted(self.toolbar):
+            iface.mainWindow().removeToolBar(self.toolbar)
+            self.toolbar = None
+
+    def connect_signal(self, signal, callback: Callable) -> None:
+        signal.connect(callback)
+        self._signals.append((signal, callback))
+
+    def disconnect_signals(self) -> None:
+        for signal, callback in self._signals:
+            signal.disconnect(callback)
+        self._signals.clear()
 
     @property
     def adapter(self) -> Adapter:
         if self._adapter is None:
             self._adapter = Adapter()
         return self._adapter
+
+    def _setup_layers_panel(self) -> None:
+        self.panel = MainPanel()
+
+        self.panel.layerTree.setExpandsOnDoubleClick(False)
+        self.panel.layerTree.itemSelectionChanged.connect(
+            self.on_item_selection_changed
+        )
+        self.panel.layerTree.itemDoubleClicked.connect(self.add_layer)
+        self.panel.layerTree.setContextMenuPolicy(
+            Qt.ContextMenuPolicy.CustomContextMenu
+        )
+        self.panel.layerTree.customContextMenuRequested.connect(
+            self.show_layer_context_menu
+        )
+        self.panel.layerAdd.clicked.connect(self.add_layer)
+        self.panel.layerRemove.clicked.connect(self.remove_layer)
+        self.panel.layerImport.clicked.connect(self.import_layer)
+        self.panel.jakartownsFollow.toggled.connect(self.adapter.set_jakartowns_follow)
+
+        self.connect_signal(
+            self.adapter.has_presence_point, self.panel.jakartownsFollow.setEnabled
+        )
+        self.panel.jakartownsFollow.setEnabled(False)
 
     def add_action(
         self,
@@ -76,6 +160,7 @@ class Plugin:
         *,
         enabled_flag: bool = True,
         add_to_menu: bool = True,
+        add_to_toolbar: bool = True,
         status_tip: Optional[str] = None,
         whats_this: Optional[str] = None,
         parent: Optional[QWidget] = None,
@@ -125,66 +210,12 @@ class Plugin:
         if add_to_menu and self.menu is not None:
             self.menu.addAction(action)
 
-        self.actions.append(action)
+        if add_to_toolbar and self.toolbar is not None:
+            self.toolbar.addAction(action)
+
+        self._actions.append(action)
 
         return action
-
-    def initGui(self) -> None:  # noqa N802
-        self._panel = MainPanel()
-        self.toolbar = iface.addToolBar("Jakarto Real-Time Layers")
-        self.toolbar.setObjectName("Jakarto Real-Time Layers")
-
-        self.menu = QMenu("Jakarto Real-Time Layers")
-        self.menu.setIcon(QIcon(":/resources/icons/jakartowns-sync-36.png"))
-
-        # workaround for WebMenu
-        temp_action = QAction()
-        iface.addPluginToWebMenu("Jakarto Layers", temp_action)
-        iface.webMenu().addMenu(self.menu)
-        iface.removePluginWebMenu("Jakarto Layers", temp_action)
-
-        self.panel.layerTree.setExpandsOnDoubleClick(False)
-        self.panel.layerTree.itemSelectionChanged.connect(
-            self.on_item_selection_changed
-        )
-        self.panel.layerTree.itemDoubleClicked.connect(self.add_layer)
-        self.panel.layerTree.setContextMenuPolicy(
-            Qt.ContextMenuPolicy.CustomContextMenu
-        )
-        self.panel.layerTree.customContextMenuRequested.connect(
-            self.show_layer_context_menu
-        )
-        self.panel.layerAdd.clicked.connect(self.add_layer)
-        self.panel.layerRemove.clicked.connect(self.remove_layer)
-        self.panel.layerImport.clicked.connect(self.import_layer)
-        self.panel.jakartownsFollow.toggled.connect(self.adapter.set_jakartowns_follow)
-        self.adapter.has_presence_point.connect(self.panel.jakartownsFollow.setEnabled)
-        self.panel.jakartownsFollow.setEnabled(False)
-
-        QgsProject.instance().layersRemoved.connect(self.on_layers_removed)
-        iface.currentLayerChanged.connect(self.on_current_layer_changed)
-
-        self._sync_layer_action = self.add_action(
-            ":/resources/icons/jakartowns-sync-36.png",
-            text="Sync active layer with Jakartowns",
-            callback=self.sync_layer_with_jakartowns,
-            parent=iface.mainWindow(),
-        )
-        self._show_layers_action = self.add_action(
-            ":/resources/icons/layer-solid-36.png",
-            text="Jakarto Real-Time Layers list",
-            callback=self.show_layers_list,
-            parent=iface.mainWindow(),
-        )
-        self.on_current_layer_changed()
-        self.toolbar.addAction(self._sync_layer_action)
-        self.toolbar.addAction(self._show_layers_action)
-
-        self.remove_all_presence_layers()
-
-        if hasattr(iface, "projectRead"):
-            # this is not available in tests
-            iface.projectRead.connect(self.remove_all_presence_layers)
 
     def is_layer_syncable(self, layer: QgsMapLayer) -> bool:
         return (
@@ -194,13 +225,12 @@ class Plugin:
         )
 
     def on_current_layer_changed(self, layer: Optional[QgsMapLayer] = None) -> None:
+        if self.sync_layer_action is None:
+            return
         if layer is None:
             layer = iface.activeLayer()
-        if self._sync_layer_action is not None and not sip.isdeleted(
-            self._sync_layer_action
-        ):
-            syncable = self.is_layer_syncable(layer)
-            self._sync_layer_action.setEnabled(syncable)
+        if not sip.isdeleted(self.sync_layer_action):
+            self.sync_layer_action.setEnabled(self.is_layer_syncable(layer))
 
     def show_layer_context_menu(self, position):
         item = self.panel.layerTree.itemAt(position)
@@ -250,27 +280,6 @@ class Plugin:
             self.rename_layer(item)
         elif action == drop_action:
             self.drop_layer(item)
-
-    def onClosePlugin(self) -> None:  # noqa N802
-        """Cleanup necessary items here when plugin dockwidget is closed"""
-
-    def unload(self) -> None:
-        """Removes the plugin menu item and icon from QGIS GUI."""
-        if self._adapter is not None:
-            self.adapter.close()
-        if self._panel is not None:
-            self._panel.close()
-            self._panel = None
-
-        if self.toolbar:
-            iface.mainWindow().removeToolBar(self.toolbar)
-            self.toolbar = None
-
-        for action in self.actions:
-            if not sip.isdeleted(action):
-                action.deleteLater()
-
-        iface.currentLayerChanged.disconnect(self.on_current_layer_changed)
 
     def setup_auth(self) -> bool:
         return auth.setup_auth(check_function=self.adapter.setup_auth)
