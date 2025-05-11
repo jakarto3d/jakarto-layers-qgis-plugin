@@ -7,6 +7,7 @@ from PyQt5.QtCore import QUrl
 from PyQt5.QtGui import QDesktopServices
 from qgis.core import (
     Qgis,
+    QgsApplication,
     QgsCoordinateReferenceSystem,
     QgsCoordinateTransform,
     QgsGeometry,
@@ -35,6 +36,7 @@ from .constants import jakartowns_url
 from .converters import convert_geometry_type
 from .layer import Layer
 from .ui.create_sub_layer import CreateSubLayerDialog
+from .ui.data_item_provider import DataItemProvider
 from .ui.main_panel import MainPanel
 
 iface: QgisInterface
@@ -46,6 +48,7 @@ class Plugin:
     menu: QMenu = None
     toolbar: QToolBar = None
     panel: MainPanel = None
+    dip: DataItemProvider = None
     sync_layer_action: QAction = None
 
     def __init__(self) -> None:
@@ -59,6 +62,9 @@ class Plugin:
         self.toolbar.setObjectName("Jakarto Real-Time Layers")
         self.menu = QMenu("Jakarto Real-Time Layers")
         self.menu.setIcon(QIcon(":/resources/icons/jakartowns-sync-36.png"))
+
+        self.dip = DataItemProvider()
+        QgsApplication.instance().dataItemProviderRegistry().addProvider(self.dip)
 
         self._setup_layers_panel()
 
@@ -94,6 +100,12 @@ class Plugin:
     def unload(self) -> None:
         """Removes the plugin menu item and icon from QGIS GUI."""
 
+        if self.dip is not None and not sip.isdeleted(self.dip):
+            QgsApplication.instance().dataItemProviderRegistry().removeProvider(
+                self.dip
+            )
+            self.dip = None
+
         self.disconnect_signals()
 
         if self._adapter is not None:
@@ -126,6 +138,12 @@ class Plugin:
     def adapter(self) -> Adapter:
         if self._adapter is None:
             self._adapter = Adapter()
+            self.panel.jakartownsFollow.toggled.connect(
+                self._adapter.set_jakartowns_follow
+            )
+            self.connect_signal(
+                self._adapter.has_presence_point, self.panel.jakartownsFollow.setEnabled
+            )
         return self._adapter
 
     def _setup_layers_panel(self) -> None:
@@ -145,11 +163,7 @@ class Plugin:
         self.panel.layerAdd.clicked.connect(self.add_layer)
         self.panel.layerRemove.clicked.connect(self.remove_layer)
         self.panel.layerImport.clicked.connect(self.import_layer)
-        self.panel.jakartownsFollow.toggled.connect(self.adapter.set_jakartowns_follow)
 
-        self.connect_signal(
-            self.adapter.has_presence_point, self.panel.jakartownsFollow.setEnabled
-        )
         self.panel.jakartownsFollow.setEnabled(False)
 
     def add_action(
