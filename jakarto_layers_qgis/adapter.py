@@ -439,44 +439,48 @@ class Adapter(QObject):
                     delete_messages.append(message)
 
             async def _run_realtime():
-                self._realtime = AsyncRealtimeClient(realtime_url, token=anon_key)
-                await self._realtime.connect()
-                await self._realtime.set_auth(self._session.access_token)
-                await (
-                    self._realtime.channel("points")
-                    .on_postgres_changes(
-                        "*",
-                        table="points",
-                        callback=_parse_message,
-                    )
-                    .subscribe()
-                )
-
-                channel = self._realtime.channel(
-                    # this channel is private, only the user with the same id can subscribe to it
-                    # this is configured in the realtime.messages table's RLS policies
-                    f"jakartowns_positions_{self._session.user_id}",
-                    params={
-                        "config": {
-                            "broadcast": {"ack": False, "self": False},
-                            "presence": {"key": str(uuid.uuid4())},
-                            "private": True,
-                        }
-                    },
-                )
-                await self._presence_manager.subscribe_channel(channel)
-
-                while not self._realtime_thread_event.is_set():
-                    await asyncio.sleep(0.25)
-                    if insert_messages or update_messages or delete_messages:
-                        self.realtime_event_received.emit(
-                            list(insert_messages),
-                            list(update_messages),
-                            list(delete_messages),
+                _realtime = AsyncRealtimeClient(realtime_url, token=anon_key)
+                self._realtime = _realtime
+                try:
+                    await _realtime.connect()
+                    await _realtime.set_auth(self._session.access_token)
+                    await (
+                        _realtime.channel("points")
+                        .on_postgres_changes(
+                            "*",
+                            table="points",
+                            callback=_parse_message,
                         )
-                        insert_messages.clear()
-                        update_messages.clear()
-                        delete_messages.clear()
+                        .subscribe()
+                    )
+
+                    channel = _realtime.channel(
+                        # this channel is private, only the user with the same id can subscribe to it
+                        # this is configured in the realtime.messages table's RLS policies
+                        f"jakartowns_positions_{self._session.user_id}",
+                        params={
+                            "config": {
+                                "broadcast": {"ack": False, "self": False},
+                                "presence": {"key": str(uuid.uuid4())},
+                                "private": True,
+                            }
+                        },
+                    )
+                    await self._presence_manager.subscribe_channel(channel)
+
+                    while not self._realtime_thread_event.is_set():
+                        await asyncio.sleep(0.25)
+                        if insert_messages or update_messages or delete_messages:
+                            self.realtime_event_received.emit(
+                                list(insert_messages),
+                                list(update_messages),
+                                list(delete_messages),
+                            )
+                            insert_messages.clear()
+                            update_messages.clear()
+                            delete_messages.clear()
+                finally:
+                    await _realtime.close()
 
             try:
                 asyncio.run(_run_realtime())
