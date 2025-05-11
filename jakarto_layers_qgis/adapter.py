@@ -18,6 +18,7 @@ from qgis.core import (
 from qgis.gui import QgisInterface
 from qgis.utils import iface
 
+from .auth import JakartoAuthentication
 from .constants import anon_key, realtime_url
 from .converters import (
     convert_geometry_type,
@@ -49,12 +50,12 @@ class Adapter(QObject):
         list,  # list[SupabaseDeleteMessage]
     )  # Signal for realtime events
 
-    def __init__(self) -> None:
+    def __init__(self, auth: JakartoAuthentication) -> None:
         super().__init__()
         self._loaded_layers: dict[str, Layer] = {}
         self._qgis_layer_id_to_supabase_id: dict[str, str] = {}
         self._all_layers: dict[str, Layer] = {}
-        self._session = SupabaseSession()
+        self._session = SupabaseSession(auth=auth)
         self._postgrest_client = Postgrest(self._session)
         self._realtime: Optional[AsyncRealtimeClient] = None
         self._realtime_thread_event = threading.Event()
@@ -374,10 +375,6 @@ class Adapter(QObject):
             layer.supabase_layer_id,
             callback=_sub_callback,
         )
-
-    def setup_auth(self, email: str, password: str) -> bool:
-        """This is meant to be called when the plugin is needed (on action click for example)."""
-        return self._session.setup_auth(email, password)
 
     def remove_layer(self, supabase_id: Optional[str]) -> bool:
         if not (layer := self.get_layer(supabase_id)):

@@ -6,35 +6,17 @@ from typing import Optional
 
 import requests
 
-from .constants import anon_key, auth_url, verify_ssl
-from .vendor import sentry_sdk
+from .auth import JakartoAuthentication
 
 
 class SupabaseSession:
     # seconds, should be less than 1 hour (default token expiration time)
     _session_max_age = 5 * 60
 
-    def __init__(self) -> None:
-        self._email: Optional[str] = None
-        self._password: Optional[str] = None
-        self._user_id: Optional[str] = None
-        self._access_token: Optional[str] = None
-        self._refresh_token: Optional[str] = None
-        self._token_expires_at_timestamp: Optional[int] = None
+    def __init__(self, auth: JakartoAuthentication) -> None:
         self._session: Optional[requests.Session] = None
         self._session_time = time.time()
-
-    def setup_auth(self, email: str, password: str) -> bool:
-        try:
-            self._get_token(email, password, force_refresh=True)
-        except requests.HTTPError as e:
-            if 400 <= e.response.status_code < 500:
-                return False
-            raise
-        self._email = email
-        self._password = password
-        sentry_sdk.set_user({"email": self._email})
-        return True
+        self._auth = auth
 
     @property
     def session(self) -> requests.Session:
@@ -47,68 +29,26 @@ class SupabaseSession:
         if self._session is None:
             self._session = requests.Session()
             self._session_time = time.time()
-            self._get_token(self._email, self._password)
+            self._auth.refresh_access_token(session=self._session)
+
         return self._session
 
     def request(self, method: str, url: str, **kwargs) -> requests.Response:
         return self.session.request(method, url, **kwargs)
 
     @property
-    def access_token(self) -> Optional[str]:
+    def access_token(self) -> str:
         self.session  # refresh token if needed
-        return self._access_token
+        if not self._auth._access_token:
+            raise RuntimeError("Could not get access token")
+        return self._auth._access_token
 
     @property
     def user_id(self) -> str:
         self.session  # refresh token if needed
-        if not self._user_id:
-            raise ValueError("Could not get user ID")
-        return self._user_id
-
-    def _get_token(self, email, password, *_, force_refresh: bool = False) -> bool:
-        if not self._refresh_token or force_refresh:
-            json_data = {"email": email, "password": password}
-            params = {"grant_type": "password"}
-        else:
-            json_data = {"refresh_token": self._refresh_token}
-            params = {"grant_type": "refresh_token"}
-
-        max_retries = 3
-        retry_delay = 0.25  # seconds
-        last_exception = None
-
-        post = (
-            self._session.post if self._session and not force_refresh else requests.post
-        )
-
-        for attempt in range(max_retries):
-            try:
-                response = post(
-                    auth_url,
-                    json=json_data,
-                    params=params,
-                    headers={"apiKey": anon_key},
-                    verify=verify_ssl,
-                )
-                response.raise_for_status()
-                data = response.json()
-                self._user_id = data["user"]["id"]
-                self._access_token = data["access_token"]
-                self._refresh_token = data["refresh_token"]
-                self._token_expires_at_timestamp = data["expires_at"]
-                return True
-            except requests.RequestException as e:
-                if e.response is not None and 400 <= e.response.status_code < 500:
-                    print(f"Error when getting token: {e.response.text}")
-                    attempt = max_retries  # don't retry on invalid credentials
-                else:
-                    print(f"Unexpected error when getting token: {e}")
-                last_exception = e
-                if attempt < max_retries - 1:
-                    time.sleep(retry_delay)
-                    continue
-                raise last_exception
-        return False  # This line should never be reached due to the raise above, but satisfies the type checker
+        if not self._auth._user_id:
+            raise RuntimeError("Could not get user ID")
+        return self._auth._user_id
 
     def __del__(self) -> None:
         self.close()

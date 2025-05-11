@@ -30,8 +30,8 @@ from qgis.PyQt.QtWidgets import (
 )
 from qgis.utils import iface
 
-from . import auth
 from .adapter import Adapter
+from .auth import JakartoAuthentication
 from .constants import jakartowns_url
 from .converters import convert_geometry_type
 from .layer import Layer
@@ -56,6 +56,8 @@ class Plugin:
         self._signals: list = []
 
         self._adapter = None
+
+        self._auth = JakartoAuthentication()
 
     def initGui(self) -> None:  # noqa N802
         self.toolbar = iface.addToolBar("Jakarto Real-Time Layers")
@@ -137,7 +139,7 @@ class Plugin:
     @property
     def adapter(self) -> Adapter:
         if self._adapter is None:
-            self._adapter = Adapter()
+            self._adapter = Adapter(auth=self._auth)
             self.panel.jakartownsFollow.toggled.connect(
                 self._adapter.set_jakartowns_follow
             )
@@ -295,11 +297,8 @@ class Plugin:
         elif action == drop_action:
             self.drop_layer(item)
 
-    def setup_auth(self) -> bool:
-        return auth.setup_auth(check_function=self.adapter.setup_auth)
-
     def sync_layer_with_jakartowns(self) -> None:
-        if not self.setup_auth():
+        if not self._auth.setup_auth():
             return
 
         qgis_layer = iface.activeLayer()
@@ -333,7 +332,7 @@ class Plugin:
         layer.set_layer_tree_icon(True)
 
     def show_layers_list(self) -> None:
-        if not self.setup_auth():
+        if not self._auth.setup_auth():
             return
 
         iface.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.panel)
