@@ -10,6 +10,8 @@ from qgis.core import (
     QgsDataItemProvider,
     QgsDataProvider,
 )
+from qgis.PyQt.QtGui import QIcon
+from qgis.PyQt.QtWidgets import QAction, QMenu
 
 from .utils import icon
 
@@ -19,16 +21,38 @@ if TYPE_CHECKING:
 
 class BrowserTree(QObject):
     refresh_layers_signal = pyqtSignal()
+    add_layer_signal = pyqtSignal(str)
+    merge_sub_layer_signal = pyqtSignal(str)
+    rename_layer_signal = pyqtSignal(str)
+    drop_layer_signal = pyqtSignal(str)
 
     def __init__(self, get_layers_func: Callable[[], list[Layer]]):
         super().__init__()
-        self.get_layers_func = get_layers_func
+        self._get_layers_func = get_layers_func
 
         self.dip = _DataItemProvider(self)
         self.root = _RootCollection(self)
         self.real_time_layers_collection = _RealTimeLayersCollection(self)
 
         self.refresh_layers_signal.connect(self.refresh_layers)
+
+        self._layers: list[Layer] = []
+
+    def get_layers(self) -> list[Layer]:
+        self._layers = self._get_layers_func()
+        return self._layers
+
+    def add_layer(self, supabase_layer_id: str):
+        self.add_layer_signal.emit(supabase_layer_id)
+
+    def merge_sub_layer(self, supabase_layer_id: str):
+        self.merge_sub_layer_signal.emit(supabase_layer_id)
+
+    def rename_layer(self, supabase_layer_id: str):
+        self.rename_layer_signal.emit(supabase_layer_id)
+
+    def drop_layer(self, supabase_layer_id: str):
+        self.drop_layer_signal.emit(supabase_layer_id)
 
     def refresh_layers(self):
         self.real_time_layers_collection.depopulate()
@@ -75,19 +99,76 @@ class _RealTimeLayersCollection(QgsDataCollectionItem):
         self.browser = browser
 
     def createChildren(self):
-        layers = self.browser.get_layers_func()
+        layers = self.browser.get_layers()
 
-        return [_RealTimeLayerItem(self, layer.name) for layer in layers]
+        return [_RealTimeLayerItem(self, layer, self.browser) for layer in layers]
 
 
 class _RealTimeLayerItem(QgsDataItem):
-    def __init__(self, parent, name: str):
+    def __init__(
+        self,
+        parent: _RealTimeLayersCollection,
+        layer: Layer,
+        browser: BrowserTree,
+    ):
         QgsDataItem.__init__(
             self,
             QgsDataItem.Custom,
             parent,
-            name,
-            "/Jakarto/real-time-layer/" + name,
+            layer.name,
+            "/Jakarto/real-time-layer/" + layer.supabase_layer_id,
         )
+        self.layers_collection = parent
+        self.layer = layer
+        self.browser = browser
+
         self.setIcon(icon("layer-points.svg"))
         self.populate()
+
+    def add_layer_action(self):
+        self.browser.add_layer(self.supabase_layer_id)
+
+    def merge_sub_layer_action(self):
+        self.browser.merge_sub_layer(self.supabase_layer_id)
+
+    def rename_layer_action(self):
+        self.browser.rename_layer(self.supabase_layer_id)
+
+    def drop_layer_action(self):
+        self.browser.drop_layer(self.supabase_layer_id)
+
+    def actions(self, parent):
+        actions = []
+
+        add_layer = QAction(QIcon(), "Add Layer", parent)
+        add_layer.triggered.connect(self.add_layer_action)
+        actions.append(add_layer)
+
+        merge_sub_layer = QAction(QIcon(), "Merge Sub Layer", parent)
+        merge_sub_layer.triggered.connect(self.merge_sub_layer_action)
+        is_sub_layer = self.layer.supabase_parent_layer_id is not None
+        merge_sub_layer.setVisible(is_sub_layer)
+
+        drop_layer = QAction(QIcon(), "Drop Layer", parent)
+        drop_layer.triggered.connect(self.drop_layer_action)
+
+        rename_layer = QAction(QIcon(), "Rename Layer", parent)
+        rename_layer.triggered.connect(self.rename_layer_action)
+
+        manage_menu = QMenu("Manage Layer", parent)
+
+        manage_menu.addAction(merge_sub_layer)
+        manage_menu.addAction(rename_layer)
+
+        separator = QAction(QIcon(), "", parent)
+        separator.setSeparator(True)
+        manage_menu.addAction(separator)
+
+        manage_menu.addAction(drop_layer)
+
+        manage_layer = QAction(QIcon(), "Manage Layer", parent)
+        manage_layer.setMenu(manage_menu)
+
+        actions.append(manage_layer)
+
+        return actions

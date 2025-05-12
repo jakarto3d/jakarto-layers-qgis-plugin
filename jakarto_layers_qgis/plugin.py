@@ -71,6 +71,11 @@ class Plugin(QObject):
             self.browser.dip
         )
 
+        self.connect_signal(self.browser.add_layer_signal, self.add_layer)
+        self.connect_signal(self.browser.merge_sub_layer_signal, self.merge_sub_layer)
+        self.connect_signal(self.browser.rename_layer_signal, self.rename_layer)
+        self.connect_signal(self.browser.drop_layer_signal, self.drop_layer)
+
         self._setup_layers_panel()
 
         # workaround for WebMenu
@@ -352,12 +357,12 @@ class Plugin(QObject):
             QgsProject.instance().removeMapLayers(to_remove)
             iface.mapCanvas().refresh()
 
-    def get_all_layers(self) -> list[Layer]:
+    def get_all_layers(self, fetch_layers: bool = False) -> list[Layer]:
         if not self._auth.setup_auth():
             return []
 
-        if self._adapter is None:
-            # first time loading layers
+        if self._adapter is None or fetch_layers:
+            # first time loading layers or force fetching layers
             self.adapter.fetch_layers()
 
         return self.adapter.get_all_layers()
@@ -545,8 +550,8 @@ class Plugin(QObject):
 
         new_name, ok = QInputDialog.getText(
             iface.mainWindow(),
-            f"Rename Layer '{layer.name}'",
-            "Enter new layer name:",
+            "Rename Layer",
+            f"Enter new layer name for layer '{layer.name}'",
             text=layer.name,
         )
         if ok and new_name and new_name != layer.name:
