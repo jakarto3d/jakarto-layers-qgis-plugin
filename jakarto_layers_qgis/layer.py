@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Optional, Union
 
@@ -469,3 +470,12 @@ class Layer:
             f"supabase_layer_id={self.supabase_layer_id}, "
             f"temporary={self.temporary})"
         )
+
+
+@dataclass
+class LayerDisplayProperties:
+    name: str
+    supabase_layer_id: str
+    geometry_type: str
+    supabase_srid: int
+    children: list[LayerDisplayProperties]

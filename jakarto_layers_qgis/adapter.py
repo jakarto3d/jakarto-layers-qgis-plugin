@@ -25,7 +25,7 @@ from .converters import (
     qgis_layer_to_supabase_layer,
     qgis_to_supabase_feature,
 )
-from .layer import Layer
+from .layer import Layer, LayerDisplayProperties
 from .logs import debug
 from .presence import PresenceManager
 from .qgis_events import QGISDeleteEvent, QGISInsertEvent, QGISUpdateEvent
@@ -151,21 +151,31 @@ class Adapter(QObject):
         self._presence_manager.center_view_on_position_update = value
         self._presence_manager.center_view_if_active()
 
-    def all_layer_properties(self, with_temporary: bool = False) -> list[tuple]:
-        """For display in the layer tree."""
-        all_layers = self._all_layers.copy()
-        if not with_temporary:
-            all_layers = {k: v for k, v in all_layers.items() if not v.temporary}
+    def get_all_layers(self, with_temporary_layers: bool = False) -> list[Layer]:
+        return [
+            layer
+            for layer in self._all_layers.values()
+            if with_temporary_layers or not layer.temporary
+        ]
 
-        layers_data = {}
+    def get_layer_display_properties(
+        self, with_temporary_layers: bool = False
+    ) -> list[LayerDisplayProperties]:
+        """For display in the layer tree."""
+        all_layers = {
+            layer.supabase_layer_id: layer
+            for layer in self.get_all_layers(with_temporary_layers)
+        }
+
+        layers_data: dict[str, LayerDisplayProperties] = {}
         # first pass to get all layers
         for layer_id, layer in all_layers.items():
-            layers_data[layer_id] = (
-                layer.name,
-                layer.geometry_type,
-                layer.supabase_srid,
-                layer_id,
-                [],
+            layers_data[layer_id] = LayerDisplayProperties(
+                name=layer.name,
+                geometry_type=layer.geometry_type,
+                supabase_srid=layer.supabase_srid,
+                supabase_layer_id=layer_id,
+                children=[],
             )
         # second pass to get parent-child relationships
         for layer_id, layer in all_layers.items():
@@ -176,7 +186,7 @@ class Adapter(QObject):
                 # we don't have permissions to see the parent layer
                 layer.supabase_parent_layer_id = None
                 continue
-            layers_data[parent_id][4].append(layers_data[layer_id])
+            layers_data[parent_id].children.append(layers_data[layer_id])
         # third pass to get top-level layers
         top_layers = [
             layer_data

@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Callable, Optional, Union
 
-from PyQt5.QtCore import QUrl
+from PyQt5.QtCore import QObject, QUrl
 from PyQt5.QtGui import QDesktopServices
 from qgis.core import (
     Qgis,
@@ -34,9 +34,9 @@ from .adapter import Adapter
 from .auth import JakartoAuthentication
 from .constants import jakartowns_url
 from .converters import convert_geometry_type
-from .layer import Layer
+from .layer import Layer, LayerDisplayProperties
+from .ui.browser_tree import BrowserTree
 from .ui.create_sub_layer import CreateSubLayerDialog
-from .ui.data_item_provider import DataItemProvider
 from .ui.main_panel import MainPanel
 
 iface: QgisInterface
@@ -44,14 +44,15 @@ iface: QgisInterface
 HERE = Path(__file__).parent
 
 
-class Plugin:
+class Plugin(QObject):
     menu: QMenu = None
     toolbar: QToolBar = None
     panel: MainPanel = None
-    dip: DataItemProvider = None
+    browser: BrowserTree = None
     sync_layer_action: QAction = None
 
     def __init__(self) -> None:
+        super().__init__()
         self._actions: list[QAction] = []
         self._signals: list = []
 
@@ -65,8 +66,10 @@ class Plugin:
         self.menu = QMenu("Jakarto Real-Time Layers")
         self.menu.setIcon(QIcon(":/resources/icons/jakartowns-sync-36.png"))
 
-        self.dip = DataItemProvider()
-        QgsApplication.instance().dataItemProviderRegistry().addProvider(self.dip)
+        self.browser = BrowserTree(self.get_all_layers)
+        QgsApplication.instance().dataItemProviderRegistry().addProvider(
+            self.browser.dip
+        )
 
         self._setup_layers_panel()
 
@@ -102,11 +105,11 @@ class Plugin:
     def unload(self) -> None:
         """Removes the plugin menu item and icon from QGIS GUI."""
 
-        if self.dip is not None and not sip.isdeleted(self.dip):
+        if self.browser is not None and not sip.isdeleted(self.browser.dip):
             QgsApplication.instance().dataItemProviderRegistry().removeProvider(
-                self.dip
+                self.browser.dip
             )
-            self.dip = None
+            self.browser = None
 
         self.disconnect_signals()
 
@@ -349,35 +352,48 @@ class Plugin:
             QgsProject.instance().removeMapLayers(to_remove)
             iface.mapCanvas().refresh()
 
+    def get_all_layers(self) -> list[Layer]:
+        if not self._auth.setup_auth():
+            return []
+
+        if self._adapter is None:
+            # first time loading layers
+            self.adapter.fetch_layers()
+
+        return self.adapter.get_all_layers()
+
     def reload_layers(self, fetch_layers: bool = True) -> None:
+        if not self._auth.setup_auth():
+            return
+
         if fetch_layers:
             self.adapter.fetch_layers()
 
+        # setup layer tree in the panel
         self.panel.layerTree.clear()
-        for (
-            name,
-            type_,
-            srid,
-            supabase_layer_id,
-            children,
-        ) in self.adapter.all_layer_properties(with_temporary=False):
+        props: LayerDisplayProperties
+        for props in self.adapter.get_layer_display_properties(
+            with_temporary_layers=False
+        ):
             item = QTreeWidgetItem()
-            item.setText(0, name)
-            if children:
+            item.setText(0, props.name)
+            if props.children:
                 font = item.font(0)
                 font.setBold(True)
                 item.setFont(0, font)
-            item.setText(1, type_)
-            item.setText(2, str(srid))
+            item.setText(1, props.geometry_type)
+            item.setText(2, str(props.supabase_srid))
             # Store the layer ID in the item's data
-            item.setData(0, Qt.ItemDataRole.UserRole, supabase_layer_id)
-            for child_name, child_type, child_srid, child_id, _ in children:
+            item.setData(0, Qt.ItemDataRole.UserRole, props.supabase_layer_id)
+            for child_props in props.children:
                 child_item = QTreeWidgetItem()
-                child_item.setText(0, child_name)
-                child_item.setText(1, child_type)
-                child_item.setText(2, str(child_srid))
+                child_item.setText(0, child_props.name)
+                child_item.setText(1, child_props.geometry_type)
+                child_item.setText(2, str(child_props.supabase_srid))
                 # Store the child layer ID in the item's data
-                child_item.setData(0, Qt.ItemDataRole.UserRole, child_id)
+                child_item.setData(
+                    0, Qt.ItemDataRole.UserRole, child_props.supabase_layer_id
+                )
                 item.addChild(child_item)
 
             self.panel.layerTree.addTopLevelItem(item)
@@ -386,6 +402,8 @@ class Plugin:
         self.panel.layerTree.resizeColumnToContents(2)
 
         self.panel.layerTree.expandAll()
+
+        self.browser.refresh_layers_signal.emit()
 
     def get_selected_layer(self, value: Any = None) -> Optional[str]:
         if value is not None and hasattr(value, "data"):
