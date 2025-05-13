@@ -102,7 +102,7 @@ class PresenceManager(QObject):
 
             # Style the layer with a custom SVG marker
             symbol = QgsMarkerSymbol()
-            svg_path = str(utils.icon_path("presence_marker.svg"))
+            svg_path = str(utils.icon_path("presence-marker.svg"))
             svg_layer = QgsSvgMarkerSymbolLayer(svg_path)
             svg_layer.setSize(10)
             symbol.changeSymbolLayer(0, svg_layer)
@@ -156,7 +156,6 @@ class PresenceManager(QObject):
             rotation_deg = -1 * presence_point.rotation * 180 / 3.141592
             feature.setAttributes([rotation_deg])
             features.append(feature)
-            print(f"presence_point: {presence_point}")
 
         provider.addFeatures(features)
         self.presence_layer.updateExtents()

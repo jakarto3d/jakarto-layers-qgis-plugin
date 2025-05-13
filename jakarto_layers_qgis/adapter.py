@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import threading
 import traceback
 import uuid
@@ -8,7 +7,7 @@ from collections import defaultdict
 from itertools import chain
 from typing import Any, Callable, Optional, Union
 
-from PyQt5.QtCore import QObject, pyqtBoundSignal, pyqtSignal
+from PyQt5.QtCore import QObject, QThread, pyqtBoundSignal
 from qgis.core import (
     Qgis,
     QgsFeature,
@@ -29,27 +28,15 @@ from .layer import Layer
 from .logs import debug
 from .presence import PresenceManager
 from .qgis_events import QGISDeleteEvent, QGISInsertEvent, QGISUpdateEvent
-from .supabase_events import (
-    SupabaseDeleteMessage,
-    SupabaseInsertMessage,
-    SupabaseUpdateMessage,
-    parse_message,
-)
 from .supabase_models import SupabaseFeature, SupabaseLayer
 from .supabase_postgrest import Postgrest
+from .supabase_realtime_worker import RealTimeWorker
 from .supabase_session import SupabaseSession
-from .vendor.realtime import AsyncRealtimeClient
 
 iface: QgisInterface
 
 
 class Adapter(QObject):
-    realtime_event_received = pyqtSignal(
-        list,  # list[SupabaseInsertMessage]
-        list,  # list[SupabaseUpdateMessage]
-        list,  # list[SupabaseDeleteMessage]
-    )  # Signal for realtime events
-
     def __init__(self, auth: JakartoAuthentication) -> None:
         super().__init__()
         self._loaded_layers: dict[str, Layer] = {}
@@ -57,12 +44,10 @@ class Adapter(QObject):
         self._all_layers: dict[str, Layer] = {}
         self._session = SupabaseSession(auth=auth)
         self._postgrest_client = Postgrest(self._session)
-        self._realtime: Optional[AsyncRealtimeClient] = None
+        self._realtime_worker: Optional[RealTimeWorker] = None
+        self._realtime_thread: Optional[QThread] = None
         self._realtime_thread_event = threading.Event()
         self._presence_manager = PresenceManager()
-
-        # Connect the signal to the handler
-        self.realtime_event_received.connect(self.on_supabase_realtime_event)
 
     def fetch_layers(self) -> None:
         all_layers = {
@@ -395,76 +380,30 @@ class Adapter(QObject):
             self._qgis_layer_id_to_supabase_id.clear()
 
     def start_realtime(self) -> None:
-        def _thread_func() -> None:
-            insert_messages = []
-            update_messages = []
-            delete_messages = []
-
-            def _parse_message(message: dict) -> None:
-                message = parse_message(message)
-                if message is None:
-                    return
-                if isinstance(message, SupabaseInsertMessage):
-                    insert_messages.append(message)
-                elif isinstance(message, SupabaseUpdateMessage):
-                    update_messages.append(message)
-                elif isinstance(message, SupabaseDeleteMessage):
-                    delete_messages.append(message)
-
-            async def _run_realtime():
-                _realtime: AsyncRealtimeClient = self._realtime
-                try:
-                    await _realtime.connect()
-                    await _realtime.set_auth(self._session.access_token)
-                    await (
-                        _realtime.channel("points")
-                        .on_postgres_changes(
-                            "*",
-                            table="points",
-                            callback=_parse_message,
-                        )
-                        .subscribe()
-                    )
-
-                    channel = _realtime.channel(
-                        # this channel is private, only the user with the same id can subscribe to it
-                        # this is configured in the realtime.messages table's RLS policies
-                        f"jakartowns_positions_{self._session.user_id}",
-                        params={
-                            "config": {
-                                "broadcast": {"ack": False, "self": False},
-                                "presence": {"key": str(uuid.uuid4())},
-                                "private": True,
-                            }
-                        },
-                    )
-                    await self._presence_manager.subscribe_channel(channel)
-
-                    while not self._realtime_thread_event.is_set():
-                        await asyncio.sleep(0.25)
-                        if insert_messages or update_messages or delete_messages:
-                            self.realtime_event_received.emit(
-                                list(insert_messages),
-                                list(update_messages),
-                                list(delete_messages),
-                            )
-                            insert_messages.clear()
-                            update_messages.clear()
-                            delete_messages.clear()
-                finally:
-                    await _realtime.close()
-
-            try:
-                asyncio.run(_run_realtime())
-            except Exception:
-                if not self._realtime_thread_event.is_set():
-                    raise
-
-        if self._realtime is None:
-            self._realtime = AsyncRealtimeClient(realtime_url, token=anon_key)
+        if self._realtime_worker is None:
+            # create the worker
             self._realtime_thread_event = threading.Event()
-            thread = threading.Thread(target=_thread_func, daemon=True)
-            thread.start()
+            self._realtime_thread = QThread()
+            self._realtime_worker = RealTimeWorker(
+                realtime_url,
+                anon_key,
+                self._session.user_id,
+                self._realtime_thread_event,
+                self._presence_manager,
+                self._session.access_token,
+            )
+            self._realtime_worker.moveToThread(self._realtime_thread)
+            # connect signals
+            self._realtime_worker.event_received.connect(
+                self.on_supabase_realtime_event
+            )
+            self._realtime_thread.started.connect(self._realtime_worker.start)
+            self._realtime_thread.finished.connect(self._realtime_worker.deleteLater)
+            self._realtime_worker.finished.connect(self._realtime_thread.quit)
+            self._realtime_worker.finished.connect(self._realtime_worker.deleteLater)
+
+            # start the worker
+            self._realtime_thread.start()
 
     def on_supabase_realtime_event(
         self,
@@ -516,7 +455,9 @@ class Adapter(QObject):
 
     def stop_realtime(self) -> None:
         self._realtime_thread_event.set()
-        self._realtime = None
+        self._realtime_worker = None
+        self._realtime_thread = None
+        self._realtime_thread_event = None
 
     def __del__(self) -> None:
         self.close()
