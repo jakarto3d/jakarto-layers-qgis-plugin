@@ -6,7 +6,6 @@ reportAssignmentType = "none"
 [tool.ruff]
 exclude = [
     "jakarto_layers_qgis/vendor/**",
-    "jakarto_layers_qgis/ui/resources_rc.py"
 ]
 target-version = "py39"
 
@@ -14,7 +13,6 @@ target-version = "py39"
 source = ["jakarto_layers_qgis"]
 omit = [
     "jakarto_layers_qgis/vendor/**",
-    "jakarto_layers_qgis/ui/resources_rc.py",
     "tests/**"
 ]
 

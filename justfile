@@ -56,10 +56,6 @@ vendorize:
     . .venv/bin/activate && vendoring sync
     touch jakarto_layers_qgis/vendor/__init__.py
 
-# Compile the resources.qrc file
-compile:
-    pyrcc5 jakarto_layers_qgis/ui/resources.qrc -o jakarto_layers_qgis/ui/resources_rc.py
-
 # Package the plugin into a zip file
 package:
     #!/usr/bin/env bash

@@ -25,7 +25,7 @@ from .converters import (
     qgis_layer_to_supabase_layer,
     qgis_to_supabase_feature,
 )
-from .layer import Layer, LayerDisplayProperties
+from .layer import Layer
 from .logs import debug
 from .presence import PresenceManager
 from .qgis_events import QGISDeleteEvent, QGISInsertEvent, QGISUpdateEvent
@@ -144,8 +144,11 @@ class Adapter(QObject):
         return layer.supabase_layer_id in self._loaded_layers
 
     @property
-    def has_presence_point(self) -> pyqtBoundSignal:
+    def has_presence_point_signal(self) -> pyqtBoundSignal:
         return self._presence_manager.has_presence_point
+
+    def any_presence_point(self) -> bool:
+        return self._presence_manager.any_presence_point()
 
     def set_jakartowns_follow(self, value: bool) -> None:
         self._presence_manager.center_view_on_position_update = value
@@ -157,43 +160,6 @@ class Adapter(QObject):
             for layer in self._all_layers.values()
             if with_temporary_layers or not layer.temporary
         ]
-
-    def get_layer_display_properties(
-        self, with_temporary_layers: bool = False
-    ) -> list[LayerDisplayProperties]:
-        """For display in the layer tree."""
-        all_layers = {
-            layer.supabase_layer_id: layer
-            for layer in self.get_all_layers(with_temporary_layers)
-        }
-
-        layers_data: dict[str, LayerDisplayProperties] = {}
-        # first pass to get all layers
-        for layer_id, layer in all_layers.items():
-            layers_data[layer_id] = LayerDisplayProperties(
-                name=layer.name,
-                geometry_type=layer.geometry_type,
-                supabase_srid=layer.supabase_srid,
-                supabase_layer_id=layer_id,
-                children=[],
-            )
-        # second pass to get parent-child relationships
-        for layer_id, layer in all_layers.items():
-            parent_id = layer.supabase_parent_layer_id
-            if parent_id is None:
-                continue
-            if parent_id not in layers_data:
-                # we don't have permissions to see the parent layer
-                layer.supabase_parent_layer_id = None
-                continue
-            layers_data[parent_id].children.append(layers_data[layer_id])
-        # third pass to get top-level layers
-        top_layers = [
-            layer_data
-            for layer_id, layer_data in layers_data.items()
-            if all_layers[layer_id].supabase_parent_layer_id is None
-        ]
-        return top_layers
 
     def get_layer(self, supabase_id: Optional[str]) -> Optional[Layer]:
         if supabase_id is None:
@@ -446,8 +412,7 @@ class Adapter(QObject):
                     delete_messages.append(message)
 
             async def _run_realtime():
-                _realtime = AsyncRealtimeClient(realtime_url, token=anon_key)
-                self._realtime = _realtime
+                _realtime: AsyncRealtimeClient = self._realtime
                 try:
                     await _realtime.connect()
                     await _realtime.set_auth(self._session.access_token)
@@ -496,6 +461,7 @@ class Adapter(QObject):
                     raise
 
         if self._realtime is None:
+            self._realtime = AsyncRealtimeClient(realtime_url, token=anon_key)
             self._realtime_thread_event = threading.Event()
             thread = threading.Thread(target=_thread_func, daemon=True)
             thread.start()

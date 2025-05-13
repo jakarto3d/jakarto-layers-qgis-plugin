@@ -26,7 +26,7 @@ class BrowserTree(QObject):
     rename_layer_signal = pyqtSignal(str)
     drop_layer_signal = pyqtSignal(str)
 
-    def __init__(self, get_layers_func: Callable[[], list[Layer]]):
+    def __init__(self, get_layers_func: Callable[[bool], list[Layer]]):
         super().__init__()
         self._get_layers_func = get_layers_func
 
@@ -38,8 +38,8 @@ class BrowserTree(QObject):
 
         self._layers: list[Layer] = []
 
-    def get_layers(self) -> list[Layer]:
-        self._layers = self._get_layers_func()
+    def get_layers(self, fetch_layers: bool = False) -> list[Layer]:
+        self._layers = self._get_layers_func(fetch_layers)
         return self._layers
 
     def add_layer(self, supabase_layer_id: str):
@@ -57,6 +57,17 @@ class BrowserTree(QObject):
     def refresh_layers(self):
         self.real_time_layers_collection.depopulate()
         self.real_time_layers_collection.refresh()
+
+    def select_layer(self, supabase_layer_id: str):
+        found_layer = None
+        for layer in self.real_time_layers_collection.children():
+            if layer.layer.supabase_layer_id == supabase_layer_id:
+                found_layer = layer
+                break
+        if not found_layer:
+            return
+
+        self.real_time_layers_collection.setCurrentItem(found_layer)
 
 
 class _DataItemProvider(QgsDataItemProvider):
@@ -98,8 +109,12 @@ class _RealTimeLayersCollection(QgsDataCollectionItem):
         self.setIcon(icon("jakartowns-sync-36.png"))
         self.browser = browser
 
+        self._initial_fetch_done = False
+
     def createChildren(self):
-        layers = self.browser.get_layers()
+        fetch_layers = not self._initial_fetch_done
+        layers = self.browser.get_layers(fetch_layers)
+        self._initial_fetch_done = True
 
         return [_RealTimeLayerItem(self, layer, self.browser) for layer in layers]
 
@@ -126,16 +141,20 @@ class _RealTimeLayerItem(QgsDataItem):
         self.populate()
 
     def add_layer_action(self):
-        self.browser.add_layer(self.supabase_layer_id)
+        self.browser.add_layer(self.layer.supabase_layer_id)
 
     def merge_sub_layer_action(self):
-        self.browser.merge_sub_layer(self.supabase_layer_id)
+        self.browser.merge_sub_layer(self.layer.supabase_layer_id)
 
     def rename_layer_action(self):
-        self.browser.rename_layer(self.supabase_layer_id)
+        self.browser.rename_layer(self.layer.supabase_layer_id)
 
     def drop_layer_action(self):
-        self.browser.drop_layer(self.supabase_layer_id)
+        self.browser.drop_layer(self.layer.supabase_layer_id)
+
+    def handleDoubleClick(self):
+        self.browser.add_layer(self.layer.supabase_layer_id)
+        return True
 
     def actions(self, parent):
         actions = []

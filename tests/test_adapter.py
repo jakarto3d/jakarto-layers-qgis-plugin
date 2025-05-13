@@ -13,7 +13,7 @@ from qgis.core import (
     QgsProject,
     QgsVectorLayer,
 )
-from qgis.PyQt.QtCore import QDate, QPoint, Qt
+from qgis.PyQt.QtCore import QDate, QPoint
 from qgis.PyQt.QtWidgets import QAction, QDialog, QInputDialog, QMenu, QMessageBox
 
 import jakarto_layers_qgis.plugin
@@ -157,13 +157,6 @@ def test_get_layers(plugin, load_layers):
     assert layer.supabase_srid == 2949
     assert layer.supabase_parent_layer_id is None
 
-    assert plugin.panel.layerTree.topLevelItemCount() == 1
-    item = plugin.panel.layerTree.topLevelItem(0)
-    assert item.text(0) == "road_signs_sample"
-    assert item.text(1) == "point"
-    assert item.text(2) == "2949"
-    assert item.data(0, Qt.ItemDataRole.UserRole) == supabase_layer_id
-
 
 def test_add_layer(plugin, add_layer: Layer):
     tree_root = QgsProject.instance().layerTreeRoot()
@@ -221,14 +214,6 @@ def test_create_sub_layer_3_features(
     ids = list(plugin.adapter._all_layers.keys())
     assert len(ids) == 2
     sub_layer_id = ids[1]
-
-    assert plugin.panel.layerTree.topLevelItemCount() == 1
-    parent_item = plugin.panel.layerTree.topLevelItem(0)
-    item = parent_item.child(0)
-    assert item.text(0) == "test_sub_layer"
-    assert item.text(1) == "point"
-    assert item.text(2) == "2949"
-    assert item.data(0, Qt.ItemDataRole.UserRole) == sub_layer_id
 
     assert mock_session.request.call_count == 2
     layer_post = mock_session.request.call_args_list[0]

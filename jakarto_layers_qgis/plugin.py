@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Callable, Optional, Union
+from typing import Callable, Optional
 
 from PyQt5.QtCore import QObject, QUrl
 from PyQt5.QtGui import QDesktopServices
@@ -16,7 +16,6 @@ from qgis.core import (
 )
 from qgis.gui import QgisInterface
 from qgis.PyQt import sip
-from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import (
     QAction,
@@ -25,19 +24,18 @@ from qgis.PyQt.QtWidgets import (
     QMenu,
     QMessageBox,
     QToolBar,
-    QTreeWidgetItem,
     QWidget,
 )
 from qgis.utils import iface
 
 from .adapter import Adapter
-from .auth import JakartoAuthentication
+from .auth import JakartoAuthentication, require_auth
 from .constants import jakartowns_url
 from .converters import convert_geometry_type
-from .layer import Layer, LayerDisplayProperties
+from .layer import Layer
+from .ui import utils
 from .ui.browser_tree import BrowserTree
 from .ui.create_sub_layer import CreateSubLayerDialog
-from .ui.main_panel import MainPanel
 
 iface: QgisInterface
 
@@ -47,9 +45,7 @@ HERE = Path(__file__).parent
 class Plugin(QObject):
     menu: QMenu = None
     toolbar: QToolBar = None
-    panel: MainPanel = None
     browser: BrowserTree = None
-    sync_layer_action: QAction = None
 
     def __init__(self) -> None:
         super().__init__()
@@ -64,7 +60,7 @@ class Plugin(QObject):
         self.toolbar = iface.addToolBar("Jakarto Real-Time Layers")
         self.toolbar.setObjectName("Jakarto Real-Time Layers")
         self.menu = QMenu("Jakarto Real-Time Layers")
-        self.menu.setIcon(QIcon(":/resources/icons/jakartowns-sync-36.png"))
+        self.menu.setIcon(utils.icon("jakartowns-sync-36.png"))
 
         self.browser = BrowserTree(self.get_all_layers)
         QgsApplication.instance().dataItemProviderRegistry().addProvider(
@@ -76,8 +72,6 @@ class Plugin(QObject):
         self.connect_signal(self.browser.rename_layer_signal, self.rename_layer)
         self.connect_signal(self.browser.drop_layer_signal, self.drop_layer)
 
-        self._setup_layers_panel()
-
         # workaround for WebMenu
         temp_action = QAction()
         iface.addPluginToWebMenu("Jakarto Layers", temp_action)
@@ -88,16 +82,34 @@ class Plugin(QObject):
         self.connect_signal(iface.currentLayerChanged, self.on_current_layer_changed)
 
         self.add_action(
-            ":/resources/icons/jakartowns-sync-36.png",
-            text="Sync active layer with Jakartowns",
+            utils.icon("jakartowns-sync-36.png"),
+            text="Edit active layer in Jakartowns",
             callback=self.sync_layer_with_jakartowns,
             parent=iface.mainWindow(),
+            object_name="sync_layer_with_jakartowns",
         )
         self.add_action(
-            ":/resources/icons/layer-solid-36.png",
-            text="Jakarto Real-Time Layers list",
-            callback=self.show_layers_list,
+            utils.icon("truck.png"),
+            text="Pan Map View on Jakartowns move",
+            callback=self.set_jakartowns_follow,
             parent=iface.mainWindow(),
+            checkable=True,
+            enabled=False,
+            object_name="jakartowns_follow",
+        )
+        self.add_action(
+            utils.icon("layers-plus-alt.png"),
+            text="Clone active layer as new Real-Time Layer",
+            callback=self.import_layer,
+            parent=iface.mainWindow(),
+            object_name="import_layer",
+        )
+        self.add_action(
+            utils.icon("shape-subtract.png"),
+            text="Create new Real-Time Sub-Layer from selection",
+            callback=self.create_sub_layer,
+            parent=iface.mainWindow(),
+            object_name="create_sub_layer",
         )
         self.on_current_layer_changed()
 
@@ -121,9 +133,6 @@ class Plugin(QObject):
         if self._adapter is not None:
             self.adapter.close()
             self._adapter = None
-        if self.panel is not None and not sip.isdeleted(self.panel):
-            self.panel.close()
-            self.panel = None
         for action in self._actions:
             if not sip.isdeleted(action):
                 action.deleteLater()
@@ -148,46 +157,43 @@ class Plugin(QObject):
     def adapter(self) -> Adapter:
         if self._adapter is None:
             self._adapter = Adapter(auth=self._auth)
-            self.panel.jakartownsFollow.toggled.connect(
+            self._adapter.start_realtime()
+
+            self.get_action("jakartowns_follow").toggled.connect(
                 self._adapter.set_jakartowns_follow
             )
             self.connect_signal(
-                self._adapter.has_presence_point, self.panel.jakartownsFollow.setEnabled
+                self._adapter.has_presence_point_signal,
+                self.on_has_presence_point,
             )
+            self.on_current_layer_changed()
         return self._adapter
 
-    def _setup_layers_panel(self) -> None:
-        self.panel = MainPanel()
+    def on_has_presence_point(self, value: bool) -> None:
+        self.get_action("jakartowns_follow").setEnabled(value)
 
-        self.panel.layerTree.setExpandsOnDoubleClick(False)
-        self.panel.layerTree.itemSelectionChanged.connect(
-            self.on_item_selection_changed
+    @require_auth
+    def set_jakartowns_follow(self) -> None:
+        if self._adapter is None:
+            return
+        self.adapter.set_jakartowns_follow(
+            self.get_action("jakartowns_follow").isChecked()
         )
-        self.panel.layerTree.itemDoubleClicked.connect(self.add_layer)
-        self.panel.layerTree.setContextMenuPolicy(
-            Qt.ContextMenuPolicy.CustomContextMenu
-        )
-        self.panel.layerTree.customContextMenuRequested.connect(
-            self.show_layer_context_menu
-        )
-        self.panel.layerAdd.clicked.connect(self.add_layer)
-        self.panel.layerRemove.clicked.connect(self.remove_layer)
-        self.panel.layerImport.clicked.connect(self.import_layer)
-
-        self.panel.jakartownsFollow.setEnabled(False)
 
     def add_action(
         self,
-        icon_path: Union[str, Path],
+        icon: QIcon,
         text: str,
         callback: Callable,
         *,
-        enabled_flag: bool = True,
         add_to_menu: bool = True,
         add_to_toolbar: bool = True,
         status_tip: Optional[str] = None,
         whats_this: Optional[str] = None,
         parent: Optional[QWidget] = None,
+        enabled: bool = True,
+        checkable: bool = False,
+        object_name: Optional[str] = None,
     ) -> QAction:
         """Add a toolbar icon to the toolbar.
 
@@ -220,10 +226,11 @@ class Plugin(QObject):
         :rtype: QAction
         """
 
-        icon = QIcon(str(icon_path))
         action = QAction(icon, text, parent)
-        action.triggered.connect(callback)
-        action.setEnabled(enabled_flag)
+        action.triggered.connect(lambda _: callback())
+        action.setEnabled(enabled)
+        if checkable:
+            action.setCheckable(True)
 
         if status_tip is not None:
             action.setStatusTip(status_tip)
@@ -237,78 +244,56 @@ class Plugin(QObject):
         if add_to_toolbar and self.toolbar is not None:
             self.toolbar.addAction(action)
 
+        if object_name is not None:
+            action.setObjectName(object_name)
+
         self._actions.append(action)
 
         return action
 
-    def is_layer_syncable(self, layer: QgsMapLayer) -> bool:
+    def get_action(self, object_name: str) -> QAction:
+        for action in self._actions:
+            if action.objectName() == object_name:
+                return action
+        raise ValueError(f"Action with object name {object_name} not found")
+
+    def is_layer_syncable(self, qgis_layer: QgsMapLayer) -> bool:
+        return (
+            qgis_layer is not None
+            and hasattr(qgis_layer, "geometryType")
+            and convert_geometry_type(qgis_layer.geometryType()) == "point"
+        )
+
+    def is_real_time_layer(self, layer: QgsMapLayer) -> bool:
         return (
             layer is not None
-            and hasattr(layer, "geometryType")
-            and convert_geometry_type(layer.geometryType()) == "point"
+            and layer.customProperty("supabase_layer_id", None) is not None
         )
 
     def on_current_layer_changed(self, layer: Optional[QgsMapLayer] = None) -> None:
-        if self.sync_layer_action is None:
-            return
         if layer is None:
             layer = iface.activeLayer()
-        if not sip.isdeleted(self.sync_layer_action):
-            self.sync_layer_action.setEnabled(self.is_layer_syncable(layer))
 
-    def show_layer_context_menu(self, position):
-        item = self.panel.layerTree.itemAt(position)
-        if item is None:
+        is_syncable = self.is_layer_syncable(layer)
+        is_real_time_layer = self.is_real_time_layer(layer)
+
+        sync_layer_action = self.get_action("sync_layer_with_jakartowns")
+        sync_layer_action.setEnabled(is_syncable and not is_real_time_layer)
+
+        import_layer_action = self.get_action("import_layer")
+        import_layer_action.setEnabled(is_syncable and not is_real_time_layer)
+
+        create_sub_layer_action = self.get_action("create_sub_layer")
+        create_sub_layer_action.setEnabled(is_real_time_layer)
+
+        jakartowns_follow_action = self.get_action("jakartowns_follow")
+        if not self._actions or not self._adapter:
+            jakartowns_follow_action.setEnabled(False)
             return
+        jakartowns_follow_action.setEnabled(self.adapter.any_presence_point())
 
-        layer = self.adapter.get_layer(self.get_selected_layer(item))
-        if not layer:
-            return
-        is_sub_layer = layer.supabase_parent_layer_id is not None
-
-        menu = QMenu()
-        add_action = menu.addAction("Load Layer")
-        add_action.setToolTip("Load layer on the current map")
-        add_action.setEnabled(self.panel.layerAdd.isEnabled())
-        remove_action = menu.addAction("Remove Layer")
-        remove_action.setToolTip("Remove layer from the map")
-        remove_action.setEnabled(self.panel.layerRemove.isEnabled())
-        menu.addSeparator()
-        merge_sub_layer_action = menu.addAction("Merge Sub Layer")
-        merge_sub_layer_action.setToolTip(
-            "Merge the selected sub layer into its parent layer"
-        )
-        merge_sub_layer_action.setVisible(is_sub_layer)
-        sub_layer_action = menu.addAction("New Sub Layer from selection")
-        sub_layer_action.setToolTip("Create a new sub layer from the selection")
-        sub_layer_action.setEnabled(self.panel.layerRemove.isEnabled())
-        sub_layer_action.setVisible(not is_sub_layer)
-        menu.addSeparator()
-        rename_action = menu.addAction("Rename Layer")
-        rename_action.setToolTip("Rename the selected layer")
-        menu.addSeparator()
-        drop_action = menu.addAction("Drop Layer")
-        drop_action.setToolTip("Drop layer from the database (cannot be undone)")
-
-        action = menu.exec_(self.panel.layerTree.mapToGlobal(position))
-
-        if action == add_action:
-            self.add_layer(item)
-        elif action == remove_action:
-            self.remove_layer()
-        elif action == merge_sub_layer_action:
-            self.merge_sub_layer(item)
-        elif action == sub_layer_action:
-            self.create_sub_layer(item)
-        elif action == rename_action:
-            self.rename_layer(item)
-        elif action == drop_action:
-            self.drop_layer(item)
-
+    @require_auth
     def sync_layer_with_jakartowns(self) -> None:
-        if not self._auth.setup_auth():
-            return
-
         qgis_layer = iface.activeLayer()
         if not self.is_layer_syncable(qgis_layer):
             return
@@ -339,15 +324,6 @@ class Plugin(QObject):
 
         layer.set_layer_tree_icon(True)
 
-    def show_layers_list(self) -> None:
-        if not self._auth.setup_auth():
-            return
-
-        iface.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.panel)
-
-        self.reload_layers()
-        self.adapter.start_realtime()
-
     def remove_all_presence_layers(self) -> None:
         to_remove = []
         for layer in QgsProject.instance().mapLayers().values():
@@ -357,97 +333,33 @@ class Plugin(QObject):
             QgsProject.instance().removeMapLayers(to_remove)
             iface.mapCanvas().refresh()
 
+    @require_auth(default_return=[])
     def get_all_layers(self, fetch_layers: bool = False) -> list[Layer]:
-        if not self._auth.setup_auth():
-            return []
-
         if self._adapter is None or fetch_layers:
             # first time loading layers or force fetching layers
             self.adapter.fetch_layers()
 
         return self.adapter.get_all_layers()
 
+    @require_auth
     def reload_layers(self, fetch_layers: bool = True) -> None:
-        if not self._auth.setup_auth():
-            return
-
         if fetch_layers:
             self.adapter.fetch_layers()
 
-        # setup layer tree in the panel
-        self.panel.layerTree.clear()
-        props: LayerDisplayProperties
-        for props in self.adapter.get_layer_display_properties(
-            with_temporary_layers=False
-        ):
-            item = QTreeWidgetItem()
-            item.setText(0, props.name)
-            if props.children:
-                font = item.font(0)
-                font.setBold(True)
-                item.setFont(0, font)
-            item.setText(1, props.geometry_type)
-            item.setText(2, str(props.supabase_srid))
-            # Store the layer ID in the item's data
-            item.setData(0, Qt.ItemDataRole.UserRole, props.supabase_layer_id)
-            for child_props in props.children:
-                child_item = QTreeWidgetItem()
-                child_item.setText(0, child_props.name)
-                child_item.setText(1, child_props.geometry_type)
-                child_item.setText(2, str(child_props.supabase_srid))
-                # Store the child layer ID in the item's data
-                child_item.setData(
-                    0, Qt.ItemDataRole.UserRole, child_props.supabase_layer_id
-                )
-                item.addChild(child_item)
-
-            self.panel.layerTree.addTopLevelItem(item)
-        self.panel.layerTree.resizeColumnToContents(0)
-        self.panel.layerTree.resizeColumnToContents(1)
-        self.panel.layerTree.resizeColumnToContents(2)
-
-        self.panel.layerTree.expandAll()
-
         self.browser.refresh_layers_signal.emit()
 
-    def get_selected_layer(self, value: Any = None) -> Optional[str]:
-        if value is not None and hasattr(value, "data"):
-            try:
-                return value.data(0, Qt.ItemDataRole.UserRole)
-            except TypeError:
-                return value.data(0, Qt.ItemDataRole.UserRole)
-        elif value in self.adapter._all_layers:
-            return value
-        current = self.panel.layerTree.currentItem()
-        return current.data(0, Qt.ItemDataRole.UserRole) if current else None
-
-    def on_item_selection_changed(self) -> None:
-        add_enabled, remove_enabled = True, True
-        if supabase_id := self.get_selected_layer():
-            loaded = self.adapter.is_loaded(supabase_id)
-            add_enabled = not loaded
-            remove_enabled = loaded
-
-        self.panel.layerAdd.setEnabled(add_enabled)
-        self.panel.layerRemove.setEnabled(remove_enabled)
-
     def on_layers_removed(self, removed_ids: list[str]) -> None:
-        if self.adapter.on_layers_removed(removed_ids):
-            self.on_item_selection_changed()
+        if self._adapter and self.adapter.on_layers_removed(removed_ids):
             try:
                 iface.mapCanvas().refresh()
             except RuntimeError:
                 pass  # object could be deleted here in tests
 
-    def add_layer(self, value) -> None:
-        supabase_id = self.get_selected_layer(value)
-        if supabase_id is None:
-            return
-
+    @require_auth
+    def add_layer(self, supabase_id: str) -> None:
         def _sub_callback(success: bool) -> None:
             if not success:
                 return
-            self.on_item_selection_changed()
             iface.mapCanvas().refresh()
             layer = self.adapter.get_layer(supabase_id)
             if layer is None:
@@ -457,16 +369,15 @@ class Plugin(QObject):
 
         self.adapter.add_layer(supabase_id, _sub_callback)
 
-    def remove_layer(self) -> None:
-        if self.adapter.remove_layer(self.get_selected_layer()):
-            self.on_item_selection_changed()
-            iface.mapCanvas().refresh()
-
-    def create_sub_layer(self, value) -> None:
-        supabase_id = self.get_selected_layer(value)
-        if supabase_id is None:
+    @require_auth
+    def create_sub_layer(self) -> None:
+        qgis_layer = iface.activeLayer()
+        if qgis_layer is None:
             return
-        layer = self.adapter.get_layer(supabase_id)
+        if not self.is_real_time_layer(qgis_layer):
+            return
+
+        layer = self.adapter.get_layer(qgis_layer.customProperty("supabase_layer_id"))
         if layer is None or layer.qgis_layer is None:
             return
 
@@ -495,40 +406,30 @@ class Plugin(QObject):
         if dialog.exec_() == accepted and dialog.properties:
             self.adapter.create_sub_layer(layer, dialog.properties.name)
             self.reload_layers(fetch_layers=False)
-            self.on_item_selection_changed()
             iface.mapCanvas().refresh()
 
-    def merge_sub_layer(self, value) -> None:
-        supabase_id = self.get_selected_layer(value)
-        if supabase_id is None:
-            return
+    @require_auth
+    def merge_sub_layer(self, supabase_id: str) -> None:
         self.adapter.merge_sub_layer(supabase_id)
         self.adapter.remove_layer(supabase_id)
         self.reload_layers(fetch_layers=False)
-        self.on_item_selection_changed()
         iface.mapCanvas().refresh()
 
-    def drop_layer(self, value) -> None:
-        supabase_id = self.get_selected_layer(value)
-        if supabase_id is None:
-            return
+    @require_auth
+    def drop_layer(self, supabase_id: str) -> None:
         self.adapter.remove_layer(supabase_id)
         self.adapter.drop_layer(supabase_id)
         self.reload_layers(fetch_layers=False)
-        self.on_item_selection_changed()
         iface.mapCanvas().refresh()
 
+    @require_auth
     def import_layer(self) -> None:
-        layer = iface.activeLayer()
-        if layer is None:
-            return
-        if not hasattr(layer, "geometryType"):
-            return
-        if convert_geometry_type(layer.geometryType()) != "point":
+        qgis_layer = iface.activeLayer()
+        if not self.is_layer_syncable(qgis_layer):
             return
 
         try:
-            self.adapter.import_layer(layer)
+            layer, _ = self.adapter.import_layer(qgis_layer)
         except ValueError as e:
             iface.messageBar().pushMessage(
                 "Jakarto layers",
@@ -539,11 +440,10 @@ class Plugin(QObject):
             return
 
         self.reload_layers(fetch_layers=False)
+        self.browser.select_layer(layer.supabase_layer_id)
 
-    def rename_layer(self, value) -> None:
-        supabase_id = self.get_selected_layer(value)
-        if supabase_id is None:
-            return
+    @require_auth
+    def rename_layer(self, supabase_id: str) -> None:
         layer = self.adapter.get_layer(supabase_id)
         if layer is None:
             return
@@ -557,5 +457,4 @@ class Plugin(QObject):
         if ok and new_name and new_name != layer.name:
             self.adapter.rename_layer(supabase_id, new_name)
             self.reload_layers(fetch_layers=False)
-            self.on_item_selection_changed()
             iface.mapCanvas().refresh()

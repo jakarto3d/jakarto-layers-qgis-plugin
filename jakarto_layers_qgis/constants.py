@@ -7,8 +7,6 @@ from qgis.PyQt.QtCore import QMetaType, QVariant
 
 HERE = Path(__file__).parent
 
-RESOURCES_DIR = HERE / "resources"
-
 QGIS_VERSION_INT: int = Qgis.QGIS_VERSION_INT
 
 # prod variables

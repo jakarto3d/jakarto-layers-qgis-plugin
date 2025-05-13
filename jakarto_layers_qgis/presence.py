@@ -20,7 +20,8 @@ from qgis.core import (
 from qgis.gui import QgisInterface
 from qgis.utils import iface
 
-from .constants import RESOURCES_DIR, python_to_qmetatype
+from .constants import python_to_qmetatype
+from .ui import utils
 from .vendor.realtime import AsyncRealtimeChannel
 
 iface: QgisInterface
@@ -92,6 +93,7 @@ class PresenceManager(QObject):
             self._presence_layer.setCustomProperty(
                 "jakarto_positions_presence_layer", "1"
             )
+            self._presence_layer.setCustomProperty("skipMemoryLayersCheck", 1)
             # Add fields for presence info
             self._presence_layer.dataProvider().addAttributes(
                 [QgsField("rotation", python_to_qmetatype["float"])]
@@ -100,7 +102,7 @@ class PresenceManager(QObject):
 
             # Style the layer with a custom SVG marker
             symbol = QgsMarkerSymbol()
-            svg_path = str(RESOURCES_DIR / "presence_marker.svg")
+            svg_path = str(utils.icon_path("presence_marker.svg"))
             svg_layer = QgsSvgMarkerSymbolLayer(svg_path)
             svg_layer.setSize(10)
             symbol.changeSymbolLayer(0, svg_layer)
@@ -113,8 +115,13 @@ class PresenceManager(QObject):
             # Add to project if not already added
             if self._presence_layer.id() not in QgsProject.instance().mapLayers():
                 QgsProject.instance().addMapLayer(self._presence_layer, False)
-                root = QgsProject.instance().layerTreeRoot()
-                root.insertLayer(0, self._presence_layer)
+                tree_root = QgsProject.instance().layerTreeRoot()
+                tree_root.insertLayer(0, self._presence_layer)
+                layer_node = tree_root.findLayer(self._presence_layer.id())
+                if layer_node is not None:
+                    tree_view = iface.layerTreeView()
+                    for indicator in tree_view.indicators(layer_node):
+                        tree_view.removeIndicator(layer_node, indicator)
 
         return self._presence_layer
 
@@ -149,13 +156,17 @@ class PresenceManager(QObject):
             rotation_deg = -1 * presence_point.rotation * 180 / 3.141592
             feature.setAttributes([rotation_deg])
             features.append(feature)
+            print(f"presence_point: {presence_point}")
 
         provider.addFeatures(features)
         self.presence_layer.updateExtents()
         self.presence_layer.triggerRepaint()
 
-        self.has_presence_point.emit(bool(self._last_presence_point))
+        self.has_presence_point.emit(self.any_presence_point())
         self.center_view_if_active()
+
+    def any_presence_point(self) -> bool:
+        return bool(self._last_presence_point)
 
     def center_view_if_active(self) -> None:
         if not self.center_view_on_position_update:
