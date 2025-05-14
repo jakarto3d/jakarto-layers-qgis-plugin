@@ -1,7 +1,10 @@
 from typing import Optional
 from unittest.mock import Mock, call
 
+from qgis.core import QgsAuthManager
+
 from jakarto_layers_qgis import auth
+from jakarto_layers_qgis.auth import JakartoAuthentication
 
 
 def setup_mocks(
@@ -13,13 +16,15 @@ def setup_mocks(
     auth_settings: tuple[Optional[str], Optional[str]] = (None, None),
     ask_credentials_return_value: tuple[Optional[str], Optional[str]] = (None, None),
 ):
-    auth_manager = Mock()
+    auth_manager = Mock(spec=QgsAuthManager)
     monkeypatch.setattr(
         auth,
         "QgsApplication",
         Mock(authManager=Mock(return_value=auth_manager)),
     )
+    auth_manager.masterPasswordHashInDatabase.return_value = is_auth_database_set
     auth_manager.masterPasswordIsSet.return_value = is_auth_database_set
+    auth_manager.setMasterPassword.return_value = None
     config_ids = []
     auth_manager.configIds.return_value = config_ids
 
@@ -36,15 +41,33 @@ def setup_mocks(
 
     config = Mock(isValid=lambda: True, id=lambda: "config_id")
     monkeypatch.setattr(auth, "QgsAuthMethodConfig", Mock(return_value=config))
+
+    def get_token(*_, username=None, password=None, **__):
+        token_response = auth._TokenResponse(
+            user_id="user_id",
+            access_token="access_token",
+            refresh_token="refresh_token",
+            token_expires_at_timestamp=1234567890,
+        )
+        if auth_config and [username, password] == list(auth_config):
+            return token_response
+        if auth_settings and [username, password] == list(auth_settings):
+            return token_response
+        if ask_credentials_return_value and [username, password] == list(
+            ask_credentials_return_value
+        ):
+            return token_response
+        return None
+
+    monkeypatch.setattr(auth, "_get_token", get_token)
     if auth_config:
         config_values = {"username": auth_config[0], "password": auth_config[1]}
         config.config.side_effect = config_values.get
         auth_manager.loadAuthenticationConfig.return_value = True
 
-    if ask_credentials_return_value:
-        monkeypatch.setattr(
-            auth, "_ask_credentials", Mock(return_value=ask_credentials_return_value)
-        )
+    monkeypatch.setattr(
+        auth, "_ask_credentials", Mock(return_value=ask_credentials_return_value)
+    )
 
     return auth_manager, mock_settings
 
@@ -63,7 +86,7 @@ def test_setup_auth_from_config_existing(monkeypatch):
         auth_config=("test@test.com", "password"),
     )
 
-    assert auth.setup_auth(check_function)
+    assert JakartoAuthentication().setup_auth()
 
 
 def test_setup_auth_from_config_in_settings(monkeypatch):
@@ -74,7 +97,7 @@ def test_setup_auth_from_config_in_settings(monkeypatch):
         auth_settings=("test@test.com", "password"),
     )
 
-    assert auth.setup_auth(check_function)
+    assert JakartoAuthentication().setup_auth()
     mock_settings.setValue.assert_called_once_with(
         "jakarto_auth_config_id", "config_id"
     )
@@ -90,7 +113,7 @@ def test_setup_auth_from_config_ask_success(monkeypatch):
         auth_settings=(None, None),
     )
 
-    assert auth.setup_auth(check_function)
+    assert JakartoAuthentication().setup_auth()
 
     mock_settings.setValue.assert_called_once_with(
         "jakarto_auth_config_id", "config_id"
@@ -107,7 +130,7 @@ def test_setup_auth_from_config_ask_cancel(monkeypatch):
         auth_settings=(None, None),
     )
 
-    assert not auth.setup_auth(check_function)
+    assert not JakartoAuthentication().setup_auth()
 
 
 def test_setup_auth_from_settings_existing(monkeypatch):
@@ -117,7 +140,7 @@ def test_setup_auth_from_settings_existing(monkeypatch):
         auth_settings=("test@test.com", "password"),
     )
 
-    assert auth.setup_auth(check_function)
+    assert JakartoAuthentication().setup_auth()
 
 
 def test_setup_auth_from_settings_ask_success(monkeypatch):
@@ -127,7 +150,7 @@ def test_setup_auth_from_settings_ask_success(monkeypatch):
         ask_credentials_return_value=("test@test.com", "password"),
     )
 
-    assert auth.setup_auth(check_function)
+    assert JakartoAuthentication().setup_auth()
     mock_settings.setValue.assert_has_calls(
         [
             call("jakartowns/username", "test@test.com"),
@@ -143,5 +166,5 @@ def test_setup_auth_from_settings_ask_cancel(monkeypatch):
         ask_credentials_return_value=(None, None),
     )
 
-    assert not auth.setup_auth(check_function)
+    assert not JakartoAuthentication().setup_auth()
     mock_settings.setValue.assert_not_called()

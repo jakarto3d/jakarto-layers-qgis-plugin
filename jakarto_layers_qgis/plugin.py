@@ -156,18 +156,23 @@ class Plugin(QObject):
     @property
     def adapter(self) -> Adapter:
         if self._adapter is None:
-            self._adapter = Adapter(auth=self._auth)
-            self._adapter.start_realtime()
-
-            self.get_action("jakartowns_follow").toggled.connect(
-                self._adapter.set_jakartowns_follow
-            )
-            self.connect_signal(
-                self._adapter.has_presence_point_signal,
-                self.on_has_presence_point,
-            )
+            self._adapter = self.setup_adapter()
             self.on_current_layer_changed()
         return self._adapter
+
+    def setup_adapter(self, start_realtime: bool = True) -> Adapter:
+        adapter = Adapter(auth=self._auth)
+        if start_realtime:
+            adapter.start_realtime()
+
+        self.get_action("jakartowns_follow").toggled.connect(
+            adapter.set_jakartowns_follow
+        )
+        self.connect_signal(
+            adapter.has_presence_point_signal, self.on_has_presence_point
+        )
+        self._adapter = adapter
+        return adapter
 
     def on_has_presence_point(self, value: bool) -> None:
         self.get_action("jakartowns_follow").setEnabled(value)

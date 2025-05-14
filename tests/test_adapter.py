@@ -1,4 +1,3 @@
-import os
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from unittest.mock import Mock
@@ -13,11 +12,12 @@ from qgis.core import (
     QgsProject,
     QgsVectorLayer,
 )
-from qgis.PyQt.QtCore import QDate, QPoint
-from qgis.PyQt.QtWidgets import QAction, QDialog, QInputDialog, QMenu, QMessageBox
+from qgis.PyQt.QtCore import QDate
+from qgis.PyQt.QtWidgets import QDialog, QInputDialog, QMenu, QMessageBox
 
 import jakarto_layers_qgis.plugin
 from jakarto_layers_qgis import supabase_postgrest
+from jakarto_layers_qgis.auth import JakartoAuthentication
 from jakarto_layers_qgis.constants import python_to_qmetatype, supabase_url
 from jakarto_layers_qgis.layer import Layer
 from jakarto_layers_qgis.supabase_events import parse_message
@@ -28,7 +28,6 @@ from jakarto_layers_qgis.ui.create_sub_layer import CreateSubLayerDialog
 from .utils import get_data_path, get_response, get_response_file
 
 PLUGIN_NAME = "jakarto_layers_qgis"
-MOCK_SESSION = not bool(os.environ.get("NO_MOCK_SESSION"))
 
 
 @dataclass
@@ -47,6 +46,7 @@ def plugin(qgis_app):
     qgis.utils.loadPlugin(PLUGIN_NAME)
     qgis.utils.startPlugin(PLUGIN_NAME)
     plugin_object = qgis.utils.plugins[PLUGIN_NAME]
+    plugin_object.setup_adapter(start_realtime=False)
 
     return plugin_object
 
@@ -56,30 +56,32 @@ def iface(qgis_iface):
     qgis_iface.addPluginToWebMenu = lambda *a, **kw: None
     qgis_iface.removePluginWebMenu = lambda *a, **kw: None
     qgis_iface.webMenu = lambda *a, **kw: QMenu()
+    return qgis_iface
 
 
 @pytest.fixture(autouse=True)
 def mock_session(plugin, monkeypatch) -> Mock:
-    if MOCK_SESSION:
-        session = Mock(spec=SupabaseSession)
-        plugin.adapter._session = session
-        plugin.adapter._postgrest_client._session = session
-        monkeypatch.setattr(supabase_postgrest.requests, "request", session.request)
+    auth = Mock(spec=JakartoAuthentication)
+    auth.setup_auth.return_value = True
+    plugin._auth = auth
+    session = Mock(spec=SupabaseSession)
+    plugin.adapter._session = session
+    plugin.adapter._postgrest_client._session = session
+    monkeypatch.setattr(supabase_postgrest.requests, "request", session.request)
 
     return plugin.adapter._session
 
 
 @contextmanager
 def mock_response(plugin, filename: str):
-    if MOCK_SESSION:
-        old_request = plugin.adapter._session.request
-        response = get_response(filename)
-        plugin.adapter._session.request.return_value = response
+    session = plugin.adapter._postgrest_client._session
+
+    old_request = session.request
+    session.request.return_value = get_response(filename)
 
     yield
 
-    if MOCK_SESSION:
-        plugin.adapter._session.request = old_request
+    session.request = old_request
 
 
 @pytest.fixture
@@ -93,8 +95,7 @@ def load_layers(plugin, clear_layers, mock_session) -> list[Layer]:
     with mock_response(plugin, "get_layers.json"):
         plugin.reload_layers()
 
-    if MOCK_SESSION:
-        mock_session.request.reset_mock()
+    mock_session.request.reset_mock()
 
     return list(plugin.adapter._all_layers.values())
 
@@ -108,8 +109,7 @@ def add_layer(plugin, load_layers, mock_session) -> Layer:
     # needed for QgsTask to process
     pytest_qgis_utils.wait(wait_time_milliseconds=1)
 
-    if MOCK_SESSION:
-        mock_session.request.reset_mock()
+    mock_session.request.reset_mock()
 
     return layer
 
@@ -174,23 +174,28 @@ def test_add_layer(plugin, add_layer: Layer):
     assert features[0].attributes() == first_point_attrs(add_layer.attributes)
 
 
-def test_create_sub_layer_no_selection(plugin, add_layer: Layer, message_box):
-    plugin.create_sub_layer(add_layer.supabase_layer_id)
+def test_create_sub_layer_no_selection(
+    plugin, add_layer: Layer, message_box, iface, monkeypatch
+):
+    monkeypatch.setattr(iface, "activeLayer", lambda: add_layer.qgis_layer)
+    plugin.create_sub_layer()
     assert message_box["warning"][0][0] == "No Features Selected"
 
 
 def test_create_sub_layer_from_sub_layer(
-    plugin, add_layer: Layer, message_box, monkeypatch
+    plugin, add_layer: Layer, message_box, iface, monkeypatch
 ):
+    monkeypatch.setattr(iface, "activeLayer", lambda: add_layer.qgis_layer)
     monkeypatch.setattr(add_layer, "supabase_parent_layer_id", "123")
-    plugin.create_sub_layer(add_layer.supabase_layer_id)
+    plugin.create_sub_layer()
     assert message_box["warning"][0][0] == "Already a sub-layer"
 
 
 def test_create_sub_layer_3_features(
-    plugin, add_layer: Layer, monkeypatch, mock_session
+    plugin, add_layer: Layer, iface, monkeypatch, mock_session, message_box
 ):
     # given
+    monkeypatch.setattr(iface, "activeLayer", lambda: add_layer.qgis_layer)
     # Select some features from the layer
     layer = add_layer.qgis_layer
     features = list(layer.getFeatures())
@@ -208,7 +213,7 @@ def test_create_sub_layer_3_features(
     monkeypatch.setattr(jakarto_layers_qgis.plugin, "CreateSubLayerDialog", dialog)
 
     # when
-    plugin.create_sub_layer(add_layer.supabase_layer_id)
+    plugin.create_sub_layer()
 
     # then
     ids = list(plugin.adapter._all_layers.keys())
@@ -477,9 +482,3 @@ def test_drop_layer(plugin, add_layer: Layer, mock_session):
     assert request.method == "DELETE"
     assert request.url == f"{supabase_url}/rest/v1/layers"
     assert request.params["id"] == f"eq.{add_layer.supabase_layer_id}"
-
-
-def test_context_menu(plugin, add_layer: Layer, monkeypatch):
-    """Only test context menu generation"""
-    monkeypatch.setattr(QMenu, "exec_", lambda *a, **kw: QAction(text="Load Layer"))
-    plugin.show_layer_context_menu(QPoint(0, 0))

@@ -69,7 +69,7 @@ class JakartoAuthentication:
                 self._set_credentials(username, password)
                 return True
             while True:
-                username, password = self._ask_credentials(in_qsettings=False)
+                username, password = _ask_credentials(in_qsettings=False)
                 if username is None or password is None:
                     break
                 if self._check_auth(username, password):
@@ -86,7 +86,7 @@ class JakartoAuthentication:
                 self._set_credentials(username, password)
                 return True
             while True:
-                username, password = self._ask_credentials(in_qsettings=True)
+                username, password = _ask_credentials(in_qsettings=True)
                 if username is None or password is None:
                     break
                 if self._check_auth(username, password):
@@ -128,30 +128,6 @@ class JakartoAuthentication:
         self._username = username
         self._password = password
 
-    def _ask_credentials(
-        self, in_qsettings: bool = False
-    ) -> Union[tuple[str, str], tuple[None, None]]:
-        """Ask for credentials and store them in the authentication database."""
-        description = "Please enter your credentials to access Jakarto services."
-        if in_qsettings:
-            description += (
-                "\nThe credentials will be stored in clear text on your machine."
-            )
-            description += "\nSetup the QGIS authentication database for more security."
-        else:
-            description += (
-                "\nThe credentials will be stored in the QGIS authentication database."
-            )
-        dialog = _make_auth_dialog(
-            title="Jakarto Authentication",
-            description=description,
-        )
-        if dialog.exec_() == QDialog.Accepted:
-            username = dialog.username_edit.text()
-            password = dialog.password_edit.text()
-            return username, password
-        return None, None
-
     def _get_auth_config_id(self) -> str:
         """Get the stored authentication configuration ID from QSettings."""
         return self._qsettings.value(AUTH_CONFIG_ID_KEY, "")
@@ -182,9 +158,9 @@ class JakartoAuthentication:
         auth_mgr = QgsApplication.authManager()
         # check if any master password exists
         if auth_mgr.masterPasswordHashInDatabase():
-            # will fetch the master password from the wallet on linux
-            # will also pop up a dialog to enter the master password, but it
-            # shouldn't because we checked masterPasswordHashInDatabase first
+            # Will fetch the master password from the wallet on linux.
+            # This function also pops up a dialog to enter the master password, but it
+            # shouldn't because we checked masterPasswordHashInDatabase first.
             auth_mgr.setMasterPassword(verify=False)
             # returns True if the auth config is setup and ready to use
             return auth_mgr.masterPasswordIsSet()
@@ -225,6 +201,29 @@ class JakartoAuthentication:
         if config.isValid():
             auth_mgr.storeAuthenticationConfig(config, overwrite=True)
             self._set_auth_config_id(config.id())
+
+
+def _ask_credentials(
+    in_qsettings: bool = False,
+) -> Union[tuple[str, str], tuple[None, None]]:
+    """Ask for credentials and store them in the authentication database."""
+    description = "Please enter your credentials to access Jakarto services."
+    if in_qsettings:
+        description += "\nThe credentials will be stored in clear text on your machine."
+        description += "\nSetup the QGIS authentication database for more security."
+    else:
+        description += (
+            "\nThe credentials will be stored in the QGIS authentication database."
+        )
+    dialog = _make_auth_dialog(
+        title="Jakarto Authentication",
+        description=description,
+    )
+    if dialog.exec_() == QDialog.Accepted:
+        username = dialog.username_edit.text()
+        password = dialog.password_edit.text()
+        return username, password
+    return None, None
 
 
 def require_auth(_func=None, *, default_return=None):
