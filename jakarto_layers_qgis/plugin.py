@@ -278,7 +278,13 @@ class Plugin(QObject):
             and convert_geometry_type(qgis_layer.geometryType()) == "point"
         )
 
-    def layer_has_property(self, layer: QgsMapLayer, property_name: str) -> bool:
+    def is_real_time_layer(self, qgis_layer: QgsMapLayer) -> bool:
+        return self._layer_has_property(qgis_layer, "supabase_layer_id")
+
+    def is_presence_layer(self, qgis_layer: QgsMapLayer) -> bool:
+        return self._layer_has_property(qgis_layer, "jakarto_positions_presence_layer")
+
+    def _layer_has_property(self, layer: QgsMapLayer, property_name: str) -> bool:
         return (
             layer is not None and layer.customProperty(property_name, None) is not None
         )
@@ -288,15 +294,11 @@ class Plugin(QObject):
             layer = iface.activeLayer()
 
         is_syncable = self.is_layer_syncable(layer)
-        is_real_time_layer = self.layer_has_property(layer, "supabase_layer_id")
-        is_presence_layer = self.layer_has_property(
-            layer, "jakarto_positions_presence_layer"
-        )
+        is_real_time_layer = self.is_real_time_layer(layer)
+        is_presence_layer = self.is_presence_layer(layer)
 
         sync_layer_action = self.get_action("sync_layer_with_jakartowns")
-        sync_layer_action.setEnabled(
-            is_syncable and not is_real_time_layer and not is_presence_layer
-        )
+        sync_layer_action.setEnabled(is_syncable and not is_presence_layer)
 
         import_layer_action = self.get_action("import_layer")
         import_layer_action.setEnabled(
@@ -316,14 +318,21 @@ class Plugin(QObject):
         if not self.connect_auth():
             return
         qgis_layer = iface.activeLayer()
-        if not self.is_layer_syncable(qgis_layer):
+        if not self.is_layer_syncable(qgis_layer) or self.is_presence_layer(qgis_layer):
             return
 
         if self.adapter.unsync_layer_with_jakartowns(qgis_layer):
             notify(f"Jakartowns sync deactivated for layer '{qgis_layer.name()}'")
             return  # layer was already synced with jakartowns, we just unsynced it
 
-        layer: Layer = self.adapter.sync_layer_with_jakartowns(qgis_layer)
+        if self.is_real_time_layer(qgis_layer):
+            layer = self.adapter.get_layer(
+                qgis_layer.customProperty("supabase_layer_id")
+            )
+            if layer is None:
+                return
+        else:
+            layer = self.adapter.sync_layer_with_jakartowns(qgis_layer)
 
         def _get_center_4326() -> tuple[float, float]:
             center: QgsGeometry = QgsGeometry.fromPointXY(
