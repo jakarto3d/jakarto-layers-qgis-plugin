@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from typing import TYPE_CHECKING, Callable, Optional
 
 import sip
@@ -36,11 +37,25 @@ class BrowserTree(QObject):
 
         self.refresh_layers_signal.connect(self.refresh_layers)
 
-        self._layers: list[Layer] = []
+        self.layers_by_id: dict[str, Layer] = {}
+        self.layer_id_tree: dict[str, dict] = {}
 
-    def get_layers(self, fetch_layers: bool = False) -> list[Layer]:
-        self._layers = self._get_layers_func(fetch_layers)
-        return self._layers
+    def get_layers(self, fetch_layers: bool = False):
+        _layers = self._get_layers_func(fetch_layers)
+
+        self.layer_id_tree = defaultdict(dict)
+        self.layers_by_id = {}
+
+        for layer in _layers:
+            layer_id = layer.supabase_layer_id
+            parent_id = layer.supabase_parent_layer_id
+            self.layers_by_id[layer_id] = layer
+
+            children_ids = {}
+            self.layer_id_tree[layer_id] = children_ids
+
+            if parent_id:
+                self.layer_id_tree[parent_id][layer_id] = children_ids
 
     def add_layer(self, supabase_layer_id: str):
         self.add_layer_signal.emit(supabase_layer_id)
@@ -113,18 +128,28 @@ class _RealTimeLayersCollection(QgsDataCollectionItem):
 
     def createChildren(self):
         fetch_layers = not self._initial_fetch_done
-        layers = self.browser.get_layers(fetch_layers)
+        self.browser.get_layers(fetch_layers)
         self._initial_fetch_done = True
 
-        return [_RealTimeLayerItem(self, layer, self.browser) for layer in layers]
+        top_level_layers = [
+            layer
+            for layer in self.browser.layers_by_id.values()
+            if not layer.supabase_parent_layer_id
+        ]
+
+        return [
+            _RealTimeLayerItem(self, browser=self.browser, layer=layer)
+            for layer in top_level_layers
+        ]
 
 
 class _RealTimeLayerItem(QgsDataItem):
     def __init__(
         self,
         parent: _RealTimeLayersCollection,
-        layer: Layer,
+        *_,
         browser: BrowserTree,
+        layer: Layer,
     ):
         QgsDataItem.__init__(
             self,
@@ -134,8 +159,8 @@ class _RealTimeLayerItem(QgsDataItem):
             "/Jakarto/real-time-layer/" + layer.supabase_layer_id,
         )
         self.layers_collection = parent
-        self.layer = layer
         self.browser = browser
+        self.layer = layer
 
         self.setIcon(icon("layer-points.svg"))
         self.populate()
@@ -155,6 +180,16 @@ class _RealTimeLayerItem(QgsDataItem):
     def handleDoubleClick(self):
         self.browser.add_layer(self.layer.supabase_layer_id)
         return True
+
+    def createChildren(self):
+        return [
+            _RealTimeLayerItem(
+                self,
+                browser=self.browser,
+                layer=self.browser.layers_by_id[child_id],
+            )
+            for child_id in self.browser.layer_id_tree[self.layer.supabase_layer_id]
+        ]
 
     def actions(self, parent):
         actions = []
