@@ -94,7 +94,7 @@ class Plugin(QObject):
         )
         self.add_action(
             utils.icon("truck.png"),
-            text="Pan Map View on Jakartowns move",
+            text="Pan Map View to follow Jakartowns positions",
             callback=self.set_jakartowns_follow,
             parent=iface.mainWindow(),
             checkable=True,
