@@ -278,10 +278,9 @@ class Plugin(QObject):
             and convert_geometry_type(qgis_layer.geometryType()) == "point"
         )
 
-    def is_real_time_layer(self, layer: QgsMapLayer) -> bool:
+    def layer_has_property(self, layer: QgsMapLayer, property_name: str) -> bool:
         return (
-            layer is not None
-            and layer.customProperty("supabase_layer_id", None) is not None
+            layer is not None and layer.customProperty(property_name, None) is not None
         )
 
     def on_current_layer_changed(self, layer: Optional[QgsMapLayer] = None) -> None:
@@ -289,16 +288,23 @@ class Plugin(QObject):
             layer = iface.activeLayer()
 
         is_syncable = self.is_layer_syncable(layer)
-        is_real_time_layer = self.is_real_time_layer(layer)
+        is_real_time_layer = self.layer_has_property(layer, "supabase_layer_id")
+        is_presence_layer = self.layer_has_property(
+            layer, "jakarto_positions_presence_layer"
+        )
 
         sync_layer_action = self.get_action("sync_layer_with_jakartowns")
-        sync_layer_action.setEnabled(is_syncable and not is_real_time_layer)
+        sync_layer_action.setEnabled(
+            is_syncable and not is_real_time_layer and not is_presence_layer
+        )
 
         import_layer_action = self.get_action("import_layer")
-        import_layer_action.setEnabled(is_syncable and not is_real_time_layer)
+        import_layer_action.setEnabled(
+            is_syncable and not is_real_time_layer and not is_presence_layer
+        )
 
         create_sub_layer_action = self.get_action("create_sub_layer")
-        create_sub_layer_action.setEnabled(is_real_time_layer)
+        create_sub_layer_action.setEnabled(is_real_time_layer and not is_presence_layer)
 
         jakartowns_follow_action = self.get_action("jakartowns_follow")
         if not self._actions or not self._adapter:
