@@ -151,8 +151,13 @@ class Plugin(QObject):
             self.toolbar = None
 
     def connect_signal(self, signal, callback: Callable) -> None:
+        to_store = (signal, callback)
+        if to_store in self._signals:
+            return
+
         signal.connect(callback)
-        self._signals.append((signal, callback))
+
+        self._signals.append(to_store)
 
     def disconnect_signals(self) -> None:
         for signal, callback in self._signals:
