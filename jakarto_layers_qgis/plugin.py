@@ -34,6 +34,7 @@ from .auth import JakartoAuthentication
 from .constants import jakartowns_url
 from .converters import convert_geometry_type
 from .layer import Layer
+from .logs import notify
 from .ui import utils
 from .ui.browser_tree import BrowserTree
 from .ui.create_sub_layer import CreateSubLayerDialog
@@ -320,6 +321,7 @@ class Plugin(QObject):
             return
 
         if self.adapter.unsync_layer_with_jakartowns(qgis_layer):
+            notify(f"Jakartowns sync deactivated for layer '{qgis_layer.name()}'")
             return  # layer was already synced with jakartowns, we just unsynced it
 
         layer: Layer = self.adapter.sync_layer_with_jakartowns(qgis_layer)
