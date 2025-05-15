@@ -9,7 +9,6 @@ from typing import Any, Callable, Optional, Union
 import sip
 from PyQt5.QtCore import QObject, QThread, pyqtBoundSignal
 from qgis.core import (
-    Qgis,
     QgsFeature,
     QgsProject,
     QgsVectorLayer,
@@ -24,7 +23,7 @@ from .converters import (
     qgis_to_supabase_feature,
 )
 from .layer import Layer
-from .logs import debug
+from .logs import debug, notify
 from .presence import PresenceManager
 from .qgis_events import QGISDeleteEvent, QGISInsertEvent, QGISUpdateEvent
 from .supabase_models import SupabaseFeature, SupabaseLayer
@@ -253,11 +252,9 @@ class Adapter(QObject):
         self._all_layers[supabase_layer.id] = layer
 
         if not temporary_layer:
-            iface.messageBar().pushMessage(
-                "Jakarto layers",
-                f"Imported {len(supabase_features)} features "
-                f"to '{supabase_layer.name}' layer",
-                level=Qgis.MessageLevel.Success,
+            notify(
+                f"Imported {len(supabase_features)} features to '{supabase_layer.name}' layer",
+                level="success",
                 duration=5,
             )
 
@@ -492,12 +489,10 @@ class Adapter(QObject):
         )
         self._all_layers[postgrest_layer.id] = new_layer
 
-        iface.messageBar().pushMessage(
-            "Jakarto layers",
+        notify(
             f"Created sub-layer '{postgrest_layer.name}' "
             f"from {len(selected_features)} features",
-            level=Qgis.MessageLevel.Success,
-            duration=5,
+            level="success",
         )
 
     def rename_layer(self, supabase_id: Optional[str], new_name: str) -> None:

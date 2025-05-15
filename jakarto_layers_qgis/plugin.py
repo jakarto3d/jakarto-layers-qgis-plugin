@@ -6,7 +6,6 @@ from typing import Callable, Optional
 from PyQt5.QtCore import QObject, QUrl
 from PyQt5.QtGui import QDesktopServices
 from qgis.core import (
-    Qgis,
     QgsApplication,
     QgsCoordinateReferenceSystem,
     QgsCoordinateTransform,
@@ -462,12 +461,7 @@ class Plugin(QObject):
         try:
             layer, _ = self.adapter.import_layer(qgis_layer)
         except ValueError as e:
-            iface.messageBar().pushMessage(
-                "Jakarto layers",
-                str(e),
-                level=Qgis.MessageLevel.Critical,
-                duration=5,
-            )
+            notify(str(e), level="critical")
             return
 
         self.reload_layers(fetch_layers=False)
