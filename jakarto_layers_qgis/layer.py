@@ -20,7 +20,7 @@ from jakarto_layers_qgis.vendor import sentry_sdk
 
 from .constants import geometry_types, python_to_qmetatype, qmetatype_to_python
 from .converters import supabase_attribute_to_qgis_attribute, supabase_to_qgis_feature
-from .logs import debug
+from .messages import debug
 from .qgis_events import QGISDeleteEvent, QGISInsertEvent, QGISUpdateEvent
 from .supabase_models import LayerAttribute, SupabaseFeature, SupabaseLayer
 

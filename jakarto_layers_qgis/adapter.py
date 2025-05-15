@@ -23,7 +23,7 @@ from .converters import (
     qgis_to_supabase_feature,
 )
 from .layer import Layer
-from .logs import debug, notify
+from .messages import debug, notify
 from .presence import PresenceManager
 from .qgis_events import QGISDeleteEvent, QGISInsertEvent, QGISUpdateEvent
 from .supabase_models import SupabaseFeature, SupabaseLayer

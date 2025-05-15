@@ -14,7 +14,7 @@ from qgis.PyQt.QtWidgets import (
 )
 
 from .constants import anon_key, auth_url, verify_ssl
-from .logs import log
+from .messages import log
 from .vendor import sentry_sdk
 
 AUTH_CONFIG_ID_KEY = "jakarto_auth_config_id"
