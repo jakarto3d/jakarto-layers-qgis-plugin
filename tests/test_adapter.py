@@ -106,7 +106,7 @@ def add_layer(plugin, load_layers, mock_session) -> Layer:
         plugin.add_layer(layer.supabase_layer_id)
 
     # needed for QgsTask to process
-    pytest_qgis_utils.wait(wait_time_milliseconds=1)
+    pytest_qgis_utils.wait(wait_time_milliseconds=10)
 
     mock_session.request.reset_mock()
 
