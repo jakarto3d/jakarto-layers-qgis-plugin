@@ -7,6 +7,7 @@ from collections import defaultdict
 from itertools import chain
 from typing import Any, Callable, Optional, Union
 
+import sip
 from PyQt5.QtCore import QObject, QThread, pyqtBoundSignal
 from qgis.core import (
     Qgis,
@@ -18,7 +19,6 @@ from qgis.gui import QgisInterface
 from qgis.utils import iface
 
 from .auth import JakartoAuthentication
-from .constants import anon_key, realtime_url
 from .converters import (
     convert_geometry_type,
     qgis_layer_to_supabase_layer,
@@ -37,17 +37,28 @@ iface: QgisInterface
 
 
 class Adapter(QObject):
-    def __init__(self, auth: JakartoAuthentication) -> None:
+    def __init__(
+        self,
+        auth: JakartoAuthentication,
+        realtime_thread: QThread,
+    ) -> None:
         super().__init__()
         self._loaded_layers: dict[str, Layer] = {}
         self._qgis_layer_id_to_supabase_id: dict[str, str] = {}
         self._all_layers: dict[str, Layer] = {}
         self._session = SupabaseSession(auth=auth)
         self._postgrest_client = Postgrest(self._session)
-        self._realtime_worker: Optional[RealTimeWorker] = None
-        self._realtime_thread: Optional[QThread] = None
-        self._realtime_thread_event = threading.Event()
         self._presence_manager = PresenceManager()
+
+        self._realtime_thread: QThread = realtime_thread
+        self._realtime_thread_event = threading.Event()
+        self._realtime_worker = RealTimeWorker(
+            auth=auth,
+            presence_manager=self._presence_manager,
+            stop_event=self._realtime_thread_event,
+        )
+        self._realtime_worker.moveToThread(self._realtime_thread)
+        self._realtime_started = False
 
     def fetch_layers(self) -> None:
         all_layers = {
@@ -294,8 +305,6 @@ class Adapter(QObject):
         for qgis_id, supabase_id in qgis_feature_id_to_supabase_feature_id:
             layer.add_feature_id(qgis_id, supabase_id)
 
-        self.start_realtime()
-
         return layer
 
     def unsync_layer_with_jakartowns(self, qgis_layer: QgsVectorLayer) -> bool:
@@ -380,30 +389,19 @@ class Adapter(QObject):
             self._qgis_layer_id_to_supabase_id.clear()
 
     def start_realtime(self) -> None:
-        if self._realtime_worker is None:
-            # create the worker
-            self._realtime_thread_event = threading.Event()
-            self._realtime_thread = QThread()
-            self._realtime_worker = RealTimeWorker(
-                realtime_url,
-                anon_key,
-                self._session.user_id,
-                self._realtime_thread_event,
-                self._presence_manager,
-                self._session.access_token,
-            )
-            self._realtime_worker.moveToThread(self._realtime_thread)
+        if not self._realtime_started:
             # connect signals
             self._realtime_worker.event_received.connect(
                 self.on_supabase_realtime_event
             )
             self._realtime_thread.started.connect(self._realtime_worker.start)
-            self._realtime_thread.finished.connect(self._realtime_worker.deleteLater)
             self._realtime_worker.finished.connect(self._realtime_thread.quit)
             self._realtime_worker.finished.connect(self._realtime_worker.deleteLater)
+            self._realtime_thread.finished.connect(self._realtime_thread.deleteLater)
 
             # start the worker
             self._realtime_thread.start()
+            self._realtime_started = True
 
     def on_supabase_realtime_event(
         self,
@@ -454,9 +452,18 @@ class Adapter(QObject):
                 raise
 
     def stop_realtime(self) -> None:
-        self._realtime_thread_event.set()
-        self._realtime_worker = None
-        self._realtime_thread = None
+        if self._realtime_thread_event is not None:
+            self._realtime_thread_event.set()
+
+        if (
+            self._realtime_thread is not None
+            and not sip.isdeleted(self._realtime_thread)
+            and not self._realtime_thread.isFinished()
+        ):
+            self._realtime_thread.quit()
+            self._realtime_thread.wait(msecs=300)
+            self._realtime_thread.deleteLater()
+
         self._realtime_thread_event = None
 
     def __del__(self) -> None:

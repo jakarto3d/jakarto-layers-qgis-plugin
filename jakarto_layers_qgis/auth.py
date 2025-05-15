@@ -1,7 +1,6 @@
 import time
 from dataclasses import dataclass
-from functools import wraps
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import requests
 from qgis.core import QgsApplication, QgsAuthMethodConfig
@@ -224,32 +223,6 @@ def _ask_credentials(
         password = dialog.password_edit.text()
         return username, password
     return None, None
-
-
-def require_auth(_func=None, *, default_return=None):
-    """Ask for credentials if not already authenticated.
-
-    Any plugin entrypoint (action, layer browser, etc) must use this
-    decorator to ensure credentials are available.
-
-    Args:
-        default_return: Optional value to return if authentication fails.
-            If not provided, None will be returned.
-    """
-
-    def decorator(func: Callable) -> Callable:
-        @wraps(func)
-        def wrapper(self, *args, **kwargs):
-            if not self._auth.setup_auth():
-                return default_return
-            return func(self, *args, **kwargs)
-
-        return wrapper
-
-    if _func is None:
-        return decorator
-    else:
-        return decorator(_func)
 
 
 class _AuthDialog(QDialog):

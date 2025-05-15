@@ -4,6 +4,8 @@ import uuid
 
 from PyQt5.QtCore import QObject, pyqtSignal
 
+from .auth import JakartoAuthentication
+from .constants import anon_key, realtime_url
 from .presence import PresenceManager
 from .supabase_events import (
     SupabaseDeleteMessage,
@@ -24,21 +26,16 @@ class RealTimeWorker(QObject):
 
     def __init__(
         self,
-        realtime_url: str,
-        anon_key: str,
-        user_id: str,
-        stop_event: threading.Event,
+        auth: JakartoAuthentication,
         presence_manager: PresenceManager,
-        access_token: str,
+        stop_event: threading.Event,
     ):
         super().__init__()
-        self._stop_event = stop_event
-        self._realtime_client = AsyncRealtimeClient(realtime_url, token=anon_key)
-        self._realtime_url = realtime_url
-        self._anon_key = anon_key
-        self._user_id = user_id
+        self._auth = auth
         self._presence_manager = presence_manager
-        self._access_token = access_token
+        self._stop_event = stop_event
+
+        self._realtime_client = None
 
     def start(self):
         insert_messages = []
@@ -57,10 +54,11 @@ class RealTimeWorker(QObject):
                 delete_messages.append(message)
 
         async def _run_realtime():
+            self._realtime_client = AsyncRealtimeClient(realtime_url, token=anon_key)
             _realtime: AsyncRealtimeClient = self._realtime_client
             try:
                 await _realtime.connect()
-                await _realtime.set_auth(self._access_token)
+                await _realtime.set_auth(self._auth._access_token)
                 await (
                     _realtime.channel("points")
                     .on_postgres_changes(
@@ -74,7 +72,7 @@ class RealTimeWorker(QObject):
                 channel = _realtime.channel(
                     # this channel is private, only the user with the same id can subscribe to it
                     # this is configured in the realtime.messages table's RLS policies
-                    f"jakartowns_positions_{self._user_id}",
+                    f"jakartowns_positions_{self._auth._user_id}",
                     params={
                         "config": {
                             "broadcast": {"ack": False, "self": False},

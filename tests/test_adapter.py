@@ -46,7 +46,6 @@ def plugin(qgis_app):
     qgis.utils.loadPlugin(PLUGIN_NAME)
     qgis.utils.startPlugin(PLUGIN_NAME)
     plugin_object = qgis.utils.plugins[PLUGIN_NAME]
-    plugin_object.setup_adapter(start_realtime=False)
 
     return plugin_object
 

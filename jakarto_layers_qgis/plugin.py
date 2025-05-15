@@ -16,6 +16,7 @@ from qgis.core import (
 )
 from qgis.gui import QgisInterface
 from qgis.PyQt import sip
+from qgis.PyQt.QtCore import QThread, pyqtSignal
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import (
     QAction,
@@ -29,7 +30,7 @@ from qgis.PyQt.QtWidgets import (
 from qgis.utils import iface
 
 from .adapter import Adapter
-from .auth import JakartoAuthentication, require_auth
+from .auth import JakartoAuthentication
 from .constants import jakartowns_url
 from .converters import convert_geometry_type
 from .layer import Layer
@@ -47,6 +48,8 @@ class Plugin(QObject):
     toolbar: QToolBar = None
     browser: BrowserTree = None
 
+    start_realtime_signal = pyqtSignal()
+
     def __init__(self) -> None:
         super().__init__()
         self._actions: list[QAction] = []
@@ -55,6 +58,7 @@ class Plugin(QObject):
         self._adapter = None
 
         self._auth = JakartoAuthentication()
+        self._realtime_thread = QThread()
 
     def initGui(self) -> None:  # noqa N802
         self.toolbar = iface.addToolBar("Jakarto Real-Time Layers")
@@ -115,6 +119,8 @@ class Plugin(QObject):
 
         self.remove_all_presence_layers()
 
+        self.connect_signal(self.start_realtime_signal, self.adapter.start_realtime)
+
         if hasattr(iface, "projectRead"):
             # this is not available in tests
             self.connect_signal(iface.projectRead, self.remove_all_presence_layers)
@@ -156,30 +162,33 @@ class Plugin(QObject):
     @property
     def adapter(self) -> Adapter:
         if self._adapter is None:
-            self._adapter = self.setup_adapter()
+            adapter = Adapter(auth=self._auth, realtime_thread=self._realtime_thread)
+            self.get_action("jakartowns_follow").toggled.connect(
+                adapter.set_jakartowns_follow
+            )
+            self.connect_signal(
+                adapter.has_presence_point_signal, self.on_has_presence_point
+            )
             self.on_current_layer_changed()
+            self._adapter = adapter
         return self._adapter
 
-    def setup_adapter(self, start_realtime: bool = True) -> Adapter:
-        adapter = Adapter(auth=self._auth)
-        if start_realtime:
-            adapter.start_realtime()
+    def connect_auth(self) -> bool:
+        if not self._auth.setup_auth():
+            return False
 
-        self.get_action("jakartowns_follow").toggled.connect(
-            adapter.set_jakartowns_follow
-        )
-        self.connect_signal(
-            adapter.has_presence_point_signal, self.on_has_presence_point
-        )
-        self._adapter = adapter
-        return adapter
+        # Don't call `self.adapter.start_realtime()` directly here because
+        # when `connect_auth` is called from `QgsDataCollectionItem.createChildren`,
+        # events silently fail. Probably because `createChildren` is not called
+        # from the main thread...
+        self.start_realtime_signal.emit()
+        return True
 
     def on_has_presence_point(self, value: bool) -> None:
         self.get_action("jakartowns_follow").setEnabled(value)
 
-    @require_auth
     def set_jakartowns_follow(self) -> None:
-        if self._adapter is None:
+        if self._adapter is None or not self.connect_auth():
             return
         self.adapter.set_jakartowns_follow(
             self.get_action("jakartowns_follow").isChecked()
@@ -297,8 +306,9 @@ class Plugin(QObject):
             return
         jakartowns_follow_action.setEnabled(self.adapter.any_presence_point())
 
-    @require_auth
     def sync_layer_with_jakartowns(self) -> None:
+        if not self.connect_auth():
+            return
         qgis_layer = iface.activeLayer()
         if not self.is_layer_syncable(qgis_layer):
             return
@@ -338,16 +348,18 @@ class Plugin(QObject):
             QgsProject.instance().removeMapLayers(to_remove)
             iface.mapCanvas().refresh()
 
-    @require_auth(default_return=[])
     def get_all_layers(self, fetch_layers: bool = False) -> list[Layer]:
+        if not self.connect_auth():
+            return []
         if self._adapter is None or fetch_layers:
             # first time loading layers or force fetching layers
             self.adapter.fetch_layers()
 
         return self.adapter.get_all_layers()
 
-    @require_auth
     def reload_layers(self, fetch_layers: bool = True) -> None:
+        if not self.connect_auth():
+            return
         if fetch_layers:
             self.adapter.fetch_layers()
 
@@ -360,8 +372,10 @@ class Plugin(QObject):
             except RuntimeError:
                 pass  # object could be deleted here in tests
 
-    @require_auth
     def add_layer(self, supabase_id: str) -> None:
+        if not self.connect_auth():
+            return
+
         def _sub_callback(success: bool) -> None:
             if not success:
                 return
@@ -374,8 +388,9 @@ class Plugin(QObject):
 
         self.adapter.add_layer(supabase_id, _sub_callback)
 
-    @require_auth
     def create_sub_layer(self) -> None:
+        if not self.connect_auth():
+            return
         qgis_layer = iface.activeLayer()
         if qgis_layer is None:
             return
@@ -413,22 +428,25 @@ class Plugin(QObject):
             self.reload_layers(fetch_layers=False)
             iface.mapCanvas().refresh()
 
-    @require_auth
     def merge_sub_layer(self, supabase_id: str) -> None:
+        if not self.connect_auth():
+            return
         self.adapter.merge_sub_layer(supabase_id)
         self.adapter.remove_layer(supabase_id)
         self.reload_layers(fetch_layers=False)
         iface.mapCanvas().refresh()
 
-    @require_auth
     def drop_layer(self, supabase_id: str) -> None:
+        if not self.connect_auth():
+            return
         self.adapter.remove_layer(supabase_id)
         self.adapter.drop_layer(supabase_id)
         self.reload_layers(fetch_layers=False)
         iface.mapCanvas().refresh()
 
-    @require_auth
     def import_layer(self) -> None:
+        if not self.connect_auth():
+            return
         qgis_layer = iface.activeLayer()
         if not self.is_layer_syncable(qgis_layer):
             return
@@ -447,8 +465,9 @@ class Plugin(QObject):
         self.reload_layers(fetch_layers=False)
         self.browser.select_layer(layer.supabase_layer_id)
 
-    @require_auth
     def rename_layer(self, supabase_id: str) -> None:
+        if not self.connect_auth():
+            return
         layer = self.adapter.get_layer(supabase_id)
         if layer is None:
             return
