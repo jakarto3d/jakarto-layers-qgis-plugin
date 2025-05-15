@@ -33,7 +33,7 @@ from .auth import JakartoAuthentication
 from .constants import jakartowns_url
 from .converters import convert_geometry_type
 from .layer import Layer
-from .messages import notify
+from .messages import ask, notify
 from .ui import utils
 from .ui.browser_tree import BrowserTree
 from .ui.create_sub_layer import CreateSubLayerDialog
@@ -455,7 +455,11 @@ class Plugin(QObject):
     def drop_layer(self, supabase_id: str) -> None:
         if not self.connect_auth():
             return
-
+        layer = self.adapter.get_layer(supabase_id)
+        if layer is None:
+            return
+        if not ask(f"Are you sure you want to drop layer '{layer.name}'?"):
+            return
         self.adapter.remove_layer(supabase_id)
         self.adapter.drop_layer(supabase_id)
         self.reload_layers(fetch_layers=False)

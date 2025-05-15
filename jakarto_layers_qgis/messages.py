@@ -2,6 +2,7 @@ import os
 
 from qgis.core import Qgis, QgsMessageLog
 from qgis.gui import QgisInterface
+from qgis.PyQt.QtWidgets import QMessageBox
 from qgis.utils import iface
 
 iface: QgisInterface
@@ -35,4 +36,16 @@ def notify(message: str, level: str = "info", duration: int = 5) -> None:
         message,
         level=log_level,
         duration=duration,
+    )
+
+
+def ask(message: str) -> bool:
+    return (
+        QMessageBox.question(
+            iface.mainWindow(),
+            "Jakarto Real-Time Layers",
+            message,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        == QMessageBox.StandardButton.Yes
     )
