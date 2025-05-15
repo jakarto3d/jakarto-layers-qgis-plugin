@@ -4,7 +4,6 @@ import threading
 import traceback
 import uuid
 from collections import defaultdict
-from itertools import chain
 from typing import Any, Callable, Optional, Union
 
 import sip
@@ -192,25 +191,6 @@ class Adapter(QObject):
         except Exception:
             raise ValueError(f"Unsupported CRS: {srid}")
 
-        allowed_srids = list(
-            chain(
-                range(2945, 2953),  # NAD83(CSRS) / MTM
-                [26891],  # NAD83 / MTM
-                range(32183, 32192),  # NAD83 / MTM
-                [4326],  # WGS84
-                range(6346, 6348),  # NAD83(2011) / UTM
-                range(26910, 26920),  # NAD83 / UTM
-                range(32610, 32620),  # WGS 84 / UTM
-                [2154],  # RGF93 v1 / Lambert-93 -- France
-            )
-        )
-        if srid not in allowed_srids:
-            raise ValueError(f"Unsupported CRS: {srid}")
-        # reproject to a known CRS ?
-        # target_crs = QgsCoordinateReferenceSystem("EPSG:4326")
-        # context = QgsProject.instance().transformContext()
-        # request = QgsFeatureRequest().setDestinationCrs(target_crs, context)
-        # features = list(layer.getFeatures(request))
         supabase_layer_id = str(uuid.uuid4())
         supabase_layer: SupabaseLayer = qgis_layer_to_supabase_layer(
             qgis_layer,
