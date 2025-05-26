@@ -34,7 +34,7 @@ class JakartoAuthentication:
     def is_authenticated(self) -> bool:
         return self._username is not None and self._password is not None
 
-    def setup_auth(self) -> bool:
+    def setup_auth(self, ask=True) -> bool:
         """Setup authentication for the plugin.
 
         If the authentication database is set, it will store the credentials in the
@@ -45,6 +45,9 @@ class JakartoAuthentication:
 
         If the credentials are valid, the `username` and `password` attributes will
         be set.
+
+        Args:
+            ask: If True, the user will be asked for credentials.
 
         Returns:
             True if the credentials are valid, False otherwise.
@@ -67,16 +70,17 @@ class JakartoAuthentication:
                 log(f"Stored credentials from settings in auth database: {username}")
                 self._set_credentials(username, password)
                 return True
-            while True:
-                username, password = _ask_credentials(in_qsettings=False)
-                if username is None or password is None:
-                    break
-                if self._check_auth(username, password):
-                    self._set_credentials_in_auth_database(username, password)
-                    log(f"Stored credentials in auth database: {username}")
-                    self._set_credentials(username, password)
-                    return True
-                log(f"Invalid credentials for username: {username}")
+            if ask:
+                while True:
+                    username, password = _ask_credentials(in_qsettings=False)
+                    if username is None or password is None:
+                        break
+                    if self._check_auth(username, password):
+                        self._set_credentials_in_auth_database(username, password)
+                        log(f"Stored credentials in auth database: {username}")
+                        self._set_credentials(username, password)
+                        return True
+                    log(f"Invalid credentials for username: {username}")
         else:
             # legacy way, store credentials in settings
             username, password = self.get_credentials_from_settings()
@@ -84,16 +88,17 @@ class JakartoAuthentication:
                 log(f"Using credentials from settings: {username}")
                 self._set_credentials(username, password)
                 return True
-            while True:
-                username, password = _ask_credentials(in_qsettings=True)
-                if username is None or password is None:
-                    break
-                if self._check_auth(username, password):
-                    self._set_credentials_in_settings(username, password)
-                    log(f"Stored credentials in settings: {username}")
-                    self._set_credentials(username, password)
-                    return True
-                log(f"Invalid credentials for username: {username}")
+            if ask:
+                while True:
+                    username, password = _ask_credentials(in_qsettings=True)
+                    if username is None or password is None:
+                        break
+                    if self._check_auth(username, password):
+                        self._set_credentials_in_settings(username, password)
+                        log(f"Stored credentials in settings: {username}")
+                        self._set_credentials(username, password)
+                        return True
+                    log(f"Invalid credentials for username: {username}")
 
         return False
 

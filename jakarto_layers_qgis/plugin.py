@@ -131,6 +131,8 @@ class Plugin(QObject):
         # iface.mapCanvas().installEventFilter(self)
         iface.mapCanvas().viewport().installEventFilter(self)
 
+        self.connect_auth(ask=False)
+
     def unload(self) -> None:
         """Removes the plugin menu item and icon from QGIS GUI."""
 
@@ -186,8 +188,8 @@ class Plugin(QObject):
             self._adapter = adapter
         return self._adapter
 
-    def connect_auth(self) -> bool:
-        if not self._auth.setup_auth():
+    def connect_auth(self, ask=True) -> bool:
+        if not self._auth.setup_auth(ask=ask):
             return False
 
         # Don't call `self.adapter.start_realtime()` directly here because
