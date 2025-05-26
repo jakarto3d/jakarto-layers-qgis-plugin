@@ -93,6 +93,9 @@ class PresenceManager(QObject):
 
         self._start_send_broadcast_thread()
 
+        # request all Jakartowns viewers to broadcast their position
+        self._send_broadcast_queue.put(("jakartowns_position_broadcast_request", {}))
+
     def _start_send_broadcast_thread(self):
         def thread_target():
             async def run():
