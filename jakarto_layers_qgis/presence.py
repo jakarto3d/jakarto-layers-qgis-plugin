@@ -1,3 +1,6 @@
+import asyncio
+import queue
+import threading
 from dataclasses import dataclass
 from time import time
 from typing import Optional
@@ -42,7 +45,12 @@ class PresenceManager(QObject):
         # _last_presence_point is to keep track of the last position that moved
         # so we can center the view on it
         self._last_presence_point: dict[str, PresencePoint] = {}
+
+        self._channel: Optional[AsyncRealtimeChannel] = None
+        self._send_broadcast_queue = queue.Queue()
+        self._send_broadcast_thread: Optional[threading.Thread] = None
         self.center_view_on_position_update = False
+        self.send_jakartowns_move_requests = True
 
         self.presence_update.connect(self._update_presence_layer)
 
@@ -81,6 +89,28 @@ class PresenceManager(QObject):
             .on_broadcast("jakartowns_position", callback=on_position_update)
             .subscribe()
         )
+        self._channel = channel
+
+        self._start_send_broadcast_thread()
+
+    def _start_send_broadcast_thread(self):
+        def thread_target():
+            async def run():
+                while True:
+                    payload = self._send_broadcast_queue.get()
+                    if self._channel is None:
+                        continue
+                    if payload is None:
+                        break
+                    event, data = payload
+                    await self._channel.send_broadcast(event=event, data=data)
+
+            asyncio.run(run())
+
+        self._send_broadcast_thread = threading.Thread(
+            target=thread_target, daemon=True
+        )
+        self._send_broadcast_thread.start()
 
     @property
     def presence_layer(self):
@@ -192,7 +222,28 @@ class PresenceManager(QObject):
         iface.mapCanvas().setCenter(geom.asPoint())
         iface.mapCanvas().refresh()
 
+    def send_jakartowns_move_request(
+        self,
+        lon: float,
+        lat: float,
+        layer_ids: list[str],
+    ) -> None:
+        if self._channel is None or not self.send_jakartowns_move_requests:
+            return
+        self._send_broadcast_queue.put(
+            (
+                "jakartowns_move_request",
+                {
+                    "lon": lon,
+                    "lat": lat,
+                    "layer_ids": layer_ids,  # used to ignore moves for unrelated layers
+                },
+            )
+        )
+
     def close(self) -> None:
+        self._send_broadcast_queue.put(None)
+
         if self._presence_layer is not None:
             try:
                 QgsProject.instance().removeMapLayer(self._presence_layer)

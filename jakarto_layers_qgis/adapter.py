@@ -7,13 +7,16 @@ from collections import defaultdict
 from typing import Any, Callable, Optional, Union
 
 import sip
-from PyQt5.QtCore import QObject, QThread, pyqtBoundSignal
+from PyQt5.QtCore import QObject, QPoint, QThread, pyqtBoundSignal
 from qgis.core import (
+    QgsCoordinateReferenceSystem,
+    QgsCoordinateTransform,
     QgsFeature,
+    QgsGeometry,
     QgsProject,
     QgsVectorLayer,
 )
-from qgis.gui import QgisInterface
+from qgis.gui import QgisInterface, QgsMapCanvas
 from qgis.utils import iface
 
 from .auth import JakartoAuthentication
@@ -147,6 +150,28 @@ class Adapter(QObject):
     def set_jakartowns_follow(self, value: bool) -> None:
         self._presence_manager.center_view_on_position_update = value
         self._presence_manager.center_view_if_active()
+
+    def move_jakartowns_here(self, pixel_point: QPoint) -> None:
+        # the point is in screen coordinates, on the canvas
+        # we need to convert it to map coordinates
+        canvas: QgsMapCanvas = iface.mapCanvas()
+        x, y = pixel_point.x(), pixel_point.y()
+        point = QgsGeometry.fromPointXY(
+            canvas.getCoordinateTransform().toMapCoordinates(x, y)
+        )
+        canvas_crs = iface.mapCanvas().mapSettings().destinationCrs()
+        point.transform(
+            QgsCoordinateTransform(
+                canvas_crs,
+                QgsCoordinateReferenceSystem("EPSG:4326"),
+                QgsProject.instance().transformContext(),
+            )
+        )
+        pt = point.asPoint()
+
+        lng, lat = pt.x(), pt.y()
+        loaded_layer_ids = list(self._loaded_layers.keys())
+        self._presence_manager.send_jakartowns_move_request(lng, lat, loaded_layer_ids)
 
     def get_all_layers(self, with_temporary_layers: bool = False) -> list[Layer]:
         return [
