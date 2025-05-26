@@ -226,18 +226,13 @@ class PresenceManager(QObject):
         self,
         lon: float,
         lat: float,
-        layer_ids: list[str],
     ) -> None:
         if self._channel is None or not self.send_jakartowns_move_requests:
             return
         self._send_broadcast_queue.put(
             (
                 "jakartowns_move_request",
-                {
-                    "lon": lon,
-                    "lat": lat,
-                    "layer_ids": layer_ids,  # used to ignore moves for unrelated layers
-                },
+                {"lon": lon, "lat": lat},
             )
         )
 

@@ -170,8 +170,7 @@ class Adapter(QObject):
         pt = point.asPoint()
 
         lng, lat = pt.x(), pt.y()
-        loaded_layer_ids = list(self._loaded_layers.keys())
-        self._presence_manager.send_jakartowns_move_request(lng, lat, loaded_layer_ids)
+        self._presence_manager.send_jakartowns_move_request(lng, lat)
 
     def get_all_layers(self, with_temporary_layers: bool = False) -> list[Layer]:
         return [
