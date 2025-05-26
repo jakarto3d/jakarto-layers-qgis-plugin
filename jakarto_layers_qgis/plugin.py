@@ -360,10 +360,6 @@ class Plugin(QObject):
         if not self.is_layer_syncable(qgis_layer) or self.is_presence_layer(qgis_layer):
             return
 
-        if self.adapter.unsync_layer_with_jakartowns(qgis_layer):
-            notify(f"Jakartowns sync deactivated for layer '{qgis_layer.name()}'")
-            return  # layer was already synced with jakartowns, we just unsynced it
-
         if self.is_real_time_layer(qgis_layer):
             layer = self.adapter.get_layer(
                 qgis_layer.customProperty("supabase_layer_id")

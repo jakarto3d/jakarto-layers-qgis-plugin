@@ -293,9 +293,7 @@ class Adapter(QObject):
             qgis_layer, temporary_layer=True
         )
 
-        qgis_layer.setCustomProperty(
-            "jakarto_sync_with_jakartowns", layer.supabase_layer_id
-        )
+        qgis_layer.setCustomProperty("supabase_layer_id", layer.supabase_layer_id)
 
         self._all_layers[layer.supabase_layer_id] = layer
         self._loaded_layers[layer.supabase_layer_id] = layer
@@ -309,7 +307,7 @@ class Adapter(QObject):
         return layer
 
     def unsync_layer_with_jakartowns(self, qgis_layer: QgsVectorLayer) -> bool:
-        supabase_id = qgis_layer.customProperty("jakarto_sync_with_jakartowns", None)
+        supabase_id = qgis_layer.customProperty("supabase_layer_id", None)
         if supabase_id is None:
             return False
         layer = self._all_layers.get(supabase_id)
@@ -319,7 +317,7 @@ class Adapter(QObject):
             layer.disconnect_all_signals()
             layer.set_layer_tree_icon(False)
         self._postgrest_client.drop_layer(supabase_id)
-        qgis_layer.removeCustomProperty("jakarto_sync_with_jakartowns")
+        qgis_layer.removeCustomProperty("supabase_layer_id")
         return True
 
     def add_layer(
