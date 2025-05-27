@@ -131,6 +131,10 @@ class PresenceManager(QObject):
 
     def _update_presence_layer(self) -> None:
         """Update the presence layer with current presence states."""
+
+        if not bool(QgsProject.instance().mapLayers()):
+            return  # project is not loaded yet, or is blank
+
         provider = self.presence_layer.dataProvider()
         provider.truncate()
 
