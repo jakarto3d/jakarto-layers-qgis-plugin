@@ -169,8 +169,11 @@ class Adapter(QObject):
         )
         pt = point.asPoint()
 
-        lng, lat = pt.x(), pt.y()
-        self._presence_manager.send_jakartowns_move_request(lng, lat)
+        lon, lat = pt.x(), pt.y()
+
+        self._realtime_worker.enqueue_broadcast_message(
+            "jakartowns_move_request", {"lon": lon, "lat": lat}
+        )
 
     def get_all_layers(self, with_temporary_layers: bool = False) -> list[Layer]:
         return [

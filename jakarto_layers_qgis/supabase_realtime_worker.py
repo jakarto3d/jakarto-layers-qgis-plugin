@@ -1,5 +1,7 @@
 import asyncio
+import queue
 import threading
+import time
 import uuid
 
 from PyQt5.QtCore import QObject, pyqtSignal
@@ -36,6 +38,10 @@ class RealTimeWorker(QObject):
         self._stop_event = stop_event
 
         self._realtime_client = None
+        self._broadcast_queue = queue.Queue()
+
+    def enqueue_broadcast_message(self, event: str, data: dict) -> None:
+        self._broadcast_queue.put((event, data))
 
     def start(self):
         insert_messages = []
@@ -83,8 +89,31 @@ class RealTimeWorker(QObject):
                 )
                 await self._presence_manager.subscribe_channel(channel)
 
+                # request all Jakartowns viewers to broadcast their position
+                self.enqueue_broadcast_message(
+                    "jakartowns_position_broadcast_request", {}
+                )
+
+                max_postgres_change_wait = 0.25
+                wait_step = 0.05
+                wait = time.time()
+
                 while not self._stop_event.is_set():
-                    await asyncio.sleep(0.25)
+                    try:
+                        message = self._broadcast_queue.get(block=False)
+                    except queue.Empty:
+                        message = None
+
+                    if message:
+                        event, data = message
+                        await channel.send_broadcast(event=event, data=data)
+                        continue
+
+                    await asyncio.sleep(wait_step)
+
+                    if time.time() - wait < max_postgres_change_wait:
+                        continue
+
                     if insert_messages or update_messages or delete_messages:
                         self.event_received.emit(
                             list(insert_messages),
@@ -94,6 +123,8 @@ class RealTimeWorker(QObject):
                         insert_messages.clear()
                         update_messages.clear()
                         delete_messages.clear()
+                        wait = time.time()
+
             finally:
                 await _realtime.close()
 
