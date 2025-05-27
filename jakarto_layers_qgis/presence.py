@@ -57,12 +57,14 @@ class PresenceManager(QObject):
     async def subscribe_channel(self, channel: AsyncRealtimeChannel) -> None:
         def on_presence_join(key, curr_presences, joined_presences):
             for joined in joined_presences:
-                presence_client_id = joined["presence_client_id"]
+                if not (presence_client_id := joined.get("presence_client_id")):
+                    continue
                 self._presence_states.setdefault(presence_client_id, None)
 
         def on_presence_leave(key, curr_presences, left_presences):
             for left in left_presences:
-                presence_client_id = left["presence_client_id"]
+                if not (presence_client_id := left.get("presence_client_id")):
+                    continue
                 self._presence_states.pop(presence_client_id, None)
                 self._last_presence_point.pop(presence_client_id, None)
                 self.presence_update.emit()
@@ -71,7 +73,8 @@ class PresenceManager(QObject):
             if payload.get("event") != "jakartowns_position":
                 return
             payload = payload["payload"]
-            presence_client_id = payload["presence_client_id"]
+            if not (presence_client_id := payload.get("presence_client_id")):
+                return
             if not all(k in payload for k in ["x", "y", "srid"]):
                 return
             self._presence_states[presence_client_id] = PresencePoint(
