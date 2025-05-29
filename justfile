@@ -61,7 +61,6 @@ package:
     #!/usr/bin/env bash
     set -e
     just vendorize
-    just compile
     rm -rf jakarto_layers_qgis.zip
     # remove any __pycache__ folders
     find jakarto_layers_qgis -type d -name "__pycache__" -exec rm -rf {} +
