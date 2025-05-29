@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from time import time
 from typing import Optional
 
+import sip
 from PyQt5.QtCore import QObject, pyqtSignal
 from qgis.core import (
     QgsCoordinateReferenceSystem,
@@ -88,6 +89,9 @@ class PresenceManager(QObject):
 
     @property
     def presence_layer(self):
+        if self._presence_layer is not None and sip.isdeleted(self._presence_layer):
+            self._presence_layer = None
+
         if self._presence_layer is None:
             self._presence_layer = QgsVectorLayer(
                 f"Point?crs=EPSG:{PRESENCE_LAYER_SRID}&index=yes",
