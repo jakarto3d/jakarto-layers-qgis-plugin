@@ -16,7 +16,20 @@ author=David Caron
 icon=ui/icons/jakartowns-sync-36.png
 email=david.caron@jakarto.com
 changelog=
+    0.2.0 - 2025-05-29
+    
+    Added:
+        - New "Jakarto" entry in the QGIS browser panel (replaces the custom layer panel)
+        - Move Jakartowns positions on middle mouse button click
+    Changed:
+        - More efficient updates (batch the messages every 250ms)
+        - Rename button "Sync with Jakartowns" to "Edit in Jakartowns" (with the same behavior for temporary and non-temporary layers)
+    Fixed:
+        - When an insert message is received on a database layer with default values, trigger update messages for those attributes
+        - Replace any NaN and infinity floating point values with None
+
     0.1.0 - Initial release
+    
 tags=browser, cloud, jakarto, layers, realtime, shared, sharing, collaboration, internet, sync
 repository=https://github.com/jakarto3d/jakarto-layers-qgis-plugin
 tracker=https://github.com/jakarto3d/jakarto-layers-qgis-plugin/issues
