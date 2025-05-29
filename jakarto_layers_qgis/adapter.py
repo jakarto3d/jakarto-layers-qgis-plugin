@@ -61,6 +61,8 @@ class Adapter(QObject):
         self._realtime_worker.moveToThread(self._realtime_thread)
         self._realtime_started = False
 
+        self._temp_jakartowns_sync_supabase_layer_ids: list[str] = []
+
     def fetch_layers(self) -> None:
         all_layers = {
             supabase_layer.id: Layer.from_supabase_layer(
@@ -189,6 +191,24 @@ class Adapter(QObject):
             return self._all_layers[supabase_id]
         return None
 
+    def get_supabase_layer_id(self, qgis_layer: QgsVectorLayer) -> Optional[str]:
+        return self._qgis_layer_id_to_supabase_id.get(qgis_layer.id())
+
+    def is_real_time_layer(self, qgis_layer: Optional[QgsVectorLayer]) -> bool:
+        if qgis_layer is None:
+            return False
+        return bool(self.get_supabase_layer_id(qgis_layer))
+
+    def get_temp_jakartowns_sync_layer(
+        self, qgis_layer: QgsVectorLayer
+    ) -> Optional[Layer]:
+        supabase_id = self.get_supabase_layer_id(qgis_layer)
+        if supabase_id is None:
+            return None
+        if supabase_id not in self._temp_jakartowns_sync_supabase_layer_ids:
+            return None
+        return self._all_layers.get(supabase_id)
+
     def _supabase_layer_from_qgis_features(
         self,
         qgis_layer: QgsVectorLayer,
@@ -296,7 +316,7 @@ class Adapter(QObject):
             qgis_layer, temporary_layer=True
         )
 
-        qgis_layer.setCustomProperty("supabase_layer_id", layer.supabase_layer_id)
+        self._temp_jakartowns_sync_supabase_layer_ids.append(layer.supabase_layer_id)
 
         self._all_layers[layer.supabase_layer_id] = layer
         self._loaded_layers[layer.supabase_layer_id] = layer
@@ -310,9 +330,12 @@ class Adapter(QObject):
         return layer
 
     def unsync_layer_with_jakartowns(self, qgis_layer: QgsVectorLayer) -> bool:
-        supabase_id = qgis_layer.customProperty("supabase_layer_id", None)
+        supabase_id = self._qgis_layer_id_to_supabase_id.get(qgis_layer.id())
         if supabase_id is None:
             return False
+        if supabase_id not in self._temp_jakartowns_sync_supabase_layer_ids:
+            return False
+
         layer = self._all_layers.get(supabase_id)
         self._loaded_layers.pop(supabase_id, None)
         self._all_layers.pop(supabase_id, None)
@@ -320,7 +343,9 @@ class Adapter(QObject):
             layer.disconnect_all_signals()
             layer.set_layer_tree_icon(False)
         self._postgrest_client.drop_layer(supabase_id)
-        qgis_layer.removeCustomProperty("supabase_layer_id")
+
+        self._temp_jakartowns_sync_supabase_layer_ids.remove(supabase_id)
+
         return True
 
     def add_layer(
@@ -335,11 +360,11 @@ class Adapter(QObject):
 
         def _sub_callback(features: list[SupabaseFeature]) -> None:
             layer.add_features_on_load(features)
-            QgsProject.instance().addMapLayer(layer.qgis_layer, addToLegend=True)
             self._loaded_layers[layer.supabase_layer_id] = layer
             self._qgis_layer_id_to_supabase_id[layer.qgis_layer.id()] = (
                 layer.supabase_layer_id
             )
+            QgsProject.instance().addMapLayer(layer.qgis_layer, addToLegend=True)
             callback(True)
 
         self._postgrest_client.get_features(

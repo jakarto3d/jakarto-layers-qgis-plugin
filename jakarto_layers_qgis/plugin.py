@@ -118,7 +118,6 @@ class Plugin(QObject):
             parent=iface.mainWindow(),
             object_name="create_sub_layer",
         )
-        self.on_current_layer_changed()
 
         self.remove_all_presence_layers()
 
@@ -132,6 +131,8 @@ class Plugin(QObject):
         iface.mapCanvas().viewport().installEventFilter(self)
 
         self.connect_auth(ask=False)
+
+        self.on_current_layer_changed()
 
     def unload(self) -> None:
         """Removes the plugin menu item and icon from QGIS GUI."""
@@ -312,15 +313,12 @@ class Plugin(QObject):
                 return action
         raise ValueError(f"Action with object name {object_name} not found")
 
-    def is_layer_syncable(self, qgis_layer: QgsMapLayer) -> bool:
+    def is_layer_syncable(self, qgis_layer: Optional[QgsMapLayer]) -> bool:
         return (
             qgis_layer is not None
             and hasattr(qgis_layer, "geometryType")
             and convert_geometry_type(qgis_layer.geometryType()) == "point"
         )
-
-    def is_real_time_layer(self, qgis_layer: QgsMapLayer) -> bool:
-        return self._layer_has_property(qgis_layer, "supabase_layer_id")
 
     def is_presence_layer(self, qgis_layer: QgsMapLayer) -> bool:
         return self._layer_has_property(qgis_layer, "jakarto_positions_presence_layer")
@@ -334,41 +332,45 @@ class Plugin(QObject):
         if layer is None:
             layer = iface.activeLayer()
 
-        is_syncable = self.is_layer_syncable(layer)
-        is_real_time_layer = self.is_real_time_layer(layer)
-        is_presence_layer = self.is_presence_layer(layer)
-
         sync_layer_action = self.get_action("sync_layer_with_jakartowns")
-        sync_layer_action.setEnabled(is_syncable and not is_presence_layer)
-
-        import_layer_action = self.get_action("import_layer")
-        import_layer_action.setEnabled(
-            is_syncable and not is_real_time_layer and not is_presence_layer
-        )
-
-        create_sub_layer_action = self.get_action("create_sub_layer")
-        create_sub_layer_action.setEnabled(is_real_time_layer and not is_presence_layer)
-
         jakartowns_follow_action = self.get_action("jakartowns_follow")
-        if not self._actions or not self._adapter:
+        import_layer_action = self.get_action("import_layer")
+        create_sub_layer_action = self.get_action("create_sub_layer")
+
+        if layer is None or not self._actions or not self._adapter:
+            sync_layer_action.setEnabled(False)
+            import_layer_action.setEnabled(False)
+            create_sub_layer_action.setEnabled(False)
             jakartowns_follow_action.setEnabled(False)
             return
+
+        is_presence_layer = self.is_presence_layer(layer)
+        is_syncable = self.is_layer_syncable(layer) and not is_presence_layer
+        is_real_time = self.adapter.is_real_time_layer(layer) and not is_presence_layer
+        is_temp_sync = self.adapter.get_temp_jakartowns_sync_layer(layer) is not None
+
+        sync_layer_action.setEnabled(is_syncable)
         jakartowns_follow_action.setEnabled(self.adapter.any_presence_point())
+        import_layer_action.setEnabled(is_syncable and not is_real_time)
+        create_sub_layer_action.setEnabled(is_real_time and not is_temp_sync)
 
     def sync_layer_with_jakartowns(self) -> None:
         if not self.connect_auth():
             return
         qgis_layer = iface.activeLayer()
-        if not self.is_layer_syncable(qgis_layer) or self.is_presence_layer(qgis_layer):
+
+        is_syncable = self.is_layer_syncable(qgis_layer)
+        is_presence_layer = self.is_presence_layer(qgis_layer)
+
+        if not is_syncable or is_presence_layer:
             return
 
-        if self.is_real_time_layer(qgis_layer):
-            layer = self.adapter.get_layer(
-                qgis_layer.customProperty("supabase_layer_id")
-            )
-            if layer is None:
-                return
-        else:
+        temp_sync_layer = self.adapter.get_temp_jakartowns_sync_layer(qgis_layer)
+        layer = self.adapter.get_layer(self.adapter.get_supabase_layer_id(qgis_layer))
+        if temp_sync_layer is not None:
+            layer = temp_sync_layer
+
+        if layer is None:
             layer = self.adapter.sync_layer_with_jakartowns(qgis_layer)
 
         def _get_center_4326() -> tuple[float, float]:
@@ -438,6 +440,7 @@ class Plugin(QObject):
                 return
             iface.setActiveLayer(layer.qgis_layer)
             layer.set_layer_tree_icon(True)
+            self.on_current_layer_changed()
 
         self.adapter.add_layer(supabase_id, _sub_callback)
 
@@ -447,11 +450,11 @@ class Plugin(QObject):
         qgis_layer = iface.activeLayer()
         if qgis_layer is None:
             return
-        if not self.is_real_time_layer(qgis_layer):
+        if not self.adapter.is_real_time_layer(qgis_layer):
             return
 
-        layer = self.adapter.get_layer(qgis_layer.customProperty("supabase_layer_id"))
-        if layer is None or layer.qgis_layer is None:
+        layer = self.adapter.get_layer(self.adapter.get_supabase_layer_id(qgis_layer))
+        if layer is None or not layer.qgis_layer_created():
             return
 
         if layer.supabase_parent_layer_id is not None:

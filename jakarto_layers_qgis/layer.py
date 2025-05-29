@@ -111,10 +111,6 @@ class Layer:
             # ignore warning about memory layers on quit
             self._qgis_layer.setCustomProperty("skipMemoryLayersCheck", 1)
 
-            self._qgis_layer.setCustomProperty(
-                "supabase_layer_id", self.supabase_layer_id
-            )
-
         if not self._qgis_layer_signals_initialized:
             # connect signals
             signals = [
@@ -144,6 +140,9 @@ class Layer:
             self._qgis_layer_signals_initialized = True
 
         return self._qgis_layer
+
+    def qgis_layer_created(self) -> bool:
+        return bool(self._qgis_layer)
 
     def _connect_signal(self, event, callback):
         self._signals[event] = callback
