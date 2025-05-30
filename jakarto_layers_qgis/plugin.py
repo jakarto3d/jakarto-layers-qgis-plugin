@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from PyQt5.QtCore import QObject, QUrl
-from PyQt5.QtGui import QDesktopServices, QMouseEvent
+from PyQt5.QtGui import QDesktopServices, QKeyEvent
 from qgis.core import (
     QgsApplication,
     QgsCoordinateReferenceSystem,
@@ -15,7 +15,7 @@ from qgis.core import (
 )
 from qgis.gui import QgisInterface
 from qgis.PyQt import sip
-from qgis.PyQt.QtCore import Qt, QThread, pyqtSignal
+from qgis.PyQt.QtCore import QPoint, Qt, QThread, pyqtSignal
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import (
     QAction,
@@ -61,7 +61,9 @@ class Plugin(QObject):
         self._realtime_thread = QThread()
 
         self._has_presence_point = False
-        self._middle_click_start_pos = None
+
+        self._drag_start_pos = False
+        self._mouse_pos = None
 
     def initGui(self) -> None:  # noqa N802
         self.toolbar = iface.addToolBar("Jakarto Real-Time Layers")
@@ -127,8 +129,9 @@ class Plugin(QObject):
             # this is not available in tests
             self.connect_signal(iface.projectRead, self.remove_all_presence_layers)
 
-        # iface.mapCanvas().installEventFilter(self)
         iface.mapCanvas().viewport().installEventFilter(self)
+        self.connect_signal(iface.mapCanvas().keyPressed, self._on_key_press)
+        self.connect_signal(iface.mapCanvas().keyReleased, self._on_key_release)
 
         self.connect_auth(ask=False)
 
@@ -144,6 +147,7 @@ class Plugin(QObject):
             self.browser = None
 
         self.disconnect_signals()
+        iface.mapCanvas().viewport().removeEventFilter(self)
 
         if self._adapter is not None:
             self.adapter.close()
@@ -158,8 +162,6 @@ class Plugin(QObject):
         if self.toolbar is not None and not sip.isdeleted(self.toolbar):
             iface.mainWindow().removeToolBar(self.toolbar)
             self.toolbar = None
-
-        iface.mapCanvas().viewport().removeEventFilter(self)
 
     def connect_signal(self, signal, callback: Callable) -> None:
         to_store = (signal, callback)
@@ -204,16 +206,17 @@ class Plugin(QObject):
         self._has_presence_point = value
         self.get_action("jakartowns_follow").setEnabled(value)
 
-    def _on_mouse_press(self, event: QMouseEvent) -> None:
-        if event.button() == Qt.MouseButton.MiddleButton:
-            self._middle_click_start_pos = event.pos()
+    def _on_key_press(self, event: QKeyEvent) -> None:
+        if event.isAutoRepeat() or self._mouse_pos is None:
+            return
+        if event.key() == Qt.Key.Key_Space:
+            self._on_drag_start(self._mouse_pos)
 
-    def _on_mouse_release(self, event: QMouseEvent) -> None:
-        if event.button() == Qt.MouseButton.MiddleButton:
-            if event.pos() == self._middle_click_start_pos:
-                # Only call move_jakartowns_here if there was no dragging
-                self.adapter.move_jakartowns_here(event.pos())
-            self._middle_click_start_pos = None
+    def _on_key_release(self, event: QKeyEvent) -> None:
+        if event.isAutoRepeat() or self._mouse_pos is None:
+            return
+        if event.key() == Qt.Key.Key_Space:
+            self._on_drag_end(self._mouse_pos)
 
     def eventFilter(self, obj, event) -> bool:
         """Used to catch middle mouse button for Jakartowns move requests."""
@@ -222,12 +225,27 @@ class Plugin(QObject):
         if obj != iface.mapCanvas().viewport():
             return False
 
-        if event.type() == event.MouseButtonPress:
-            self._on_mouse_press(event)
-        elif event.type() == event.MouseButtonRelease:
-            self._on_mouse_release(event)
+        if event.type() == event.MouseMove:
+            # track mouse position
+            self._mouse_pos = event.pos()
+            return False
+
+        if hasattr(event, "button") and event.button() == Qt.MouseButton.MiddleButton:
+            if event.type() == event.MouseButtonPress:
+                self._on_drag_start(event.pos())
+            elif event.type() == event.MouseButtonRelease:
+                self._on_drag_end(event.pos())
 
         return False  # Let the event continue to be processed
+
+    def _on_drag_start(self, pos: QPoint) -> None:
+        self._drag_start_pos = pos
+
+    def _on_drag_end(self, pos: QPoint) -> None:
+        if pos == self._drag_start_pos:
+            # Only call move_jakartowns_here if there was no dragging
+            self.adapter.move_jakartowns_here(pos)
+        self._drag_start_pos = None
 
     def set_jakartowns_follow(self) -> None:
         if self._adapter is None or not self.connect_auth():
