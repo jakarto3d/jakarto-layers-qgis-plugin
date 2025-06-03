@@ -95,7 +95,7 @@ class Layer:
             self._qgis_layer_signals_initialized = False
             # create the layer
             self._qgis_layer = QgsVectorLayer(
-                f"{geometry_types[self.geometry_type]}?crs=EPSG:{self.supabase_srid}&index=yes",
+                f"{geometry_types[self.geometry_type]}Z?crs=EPSG:{self.supabase_srid}&index=yes",
                 self.name,
                 "memory",
             )
