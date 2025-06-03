@@ -3,8 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable, Optional
 
-from PyQt5.QtCore import QObject, QUrl
-from PyQt5.QtGui import QDesktopServices, QKeyEvent
+from PyQt5.QtCore import QEvent, QObject, QUrl
+from PyQt5.QtGui import QDesktopServices, QKeyEvent, QMouseEvent
 from qgis.core import (
     QgsApplication,
     QgsCoordinateReferenceSystem,
@@ -225,15 +225,20 @@ class Plugin(QObject):
         if obj != iface.mapCanvas().viewport():
             return False
 
-        if event.type() == event.MouseMove:
-            # track mouse position
-            self._mouse_pos = event.pos()
+        if not isinstance(event, QMouseEvent):
             return False
 
-        if hasattr(event, "button") and event.button() == Qt.MouseButton.MiddleButton:
-            if event.type() == event.MouseButtonPress:
+        type_ = event.type()
+        press = type_ == QEvent.Type.MouseButtonPress
+        release = type_ == QEvent.Type.MouseButtonRelease
+        move = type_ == QEvent.Type.MouseMove
+
+        if move:
+            self._mouse_pos = event.pos()  # track mouse position
+        elif event.button() == Qt.MouseButton.MiddleButton:
+            if press:
                 self._on_drag_start(event.pos())
-            elif event.type() == event.MouseButtonRelease:
+            elif release:
                 self._on_drag_end(event.pos())
 
         return False  # Let the event continue to be processed
