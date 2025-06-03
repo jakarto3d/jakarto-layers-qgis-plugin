@@ -29,7 +29,6 @@ class SupabaseSession:
         if self._session is None:
             self._session = requests.Session()
             self._session_time = time.time()
-            self._auth.refresh_access_token(session=self._session)
 
         return self._session
 
@@ -39,16 +38,9 @@ class SupabaseSession:
     @property
     def access_token(self) -> str:
         self.session  # refresh token if needed
-        if not self._auth._access_token:
+        if not self._auth.access_token:
             raise RuntimeError("Could not get access token")
-        return self._auth._access_token
-
-    @property
-    def user_id(self) -> str:
-        self.session  # refresh token if needed
-        if not self._auth._user_id:
-            raise RuntimeError("Could not get user ID")
-        return self._auth._user_id
+        return self._auth.access_token
 
     def __del__(self) -> None:
         self.close()

@@ -38,10 +38,15 @@ class RealTimeWorker(QObject):
         self._stop_event = stop_event
 
         self._realtime_client = None
-        self._broadcast_queue = queue.Queue()
+        self._thread_queue = queue.Queue()
+
+        self._auth.access_token_updated.connect(self.reset_auth)
 
     def enqueue_broadcast_message(self, event: str, data: dict) -> None:
-        self._broadcast_queue.put((event, data))
+        self._thread_queue.put(("broadcast", event, data))
+
+    def reset_auth(self) -> None:
+        self._thread_queue.put(("set_auth",))
 
     def start(self):
         insert_messages = []
@@ -64,7 +69,7 @@ class RealTimeWorker(QObject):
             _realtime: AsyncRealtimeClient = self._realtime_client
             try:
                 await _realtime.connect()
-                await _realtime.set_auth(self._auth._access_token)
+                await _realtime.set_auth(self._auth.access_token)
                 await (
                     _realtime.channel("points")
                     .on_postgres_changes(
@@ -78,7 +83,7 @@ class RealTimeWorker(QObject):
                 channel = _realtime.channel(
                     # this channel is private, only the user with the same id can subscribe to it
                     # this is configured in the realtime.messages table's RLS policies
-                    f"jakartowns_positions_{self._auth._user_id}",
+                    f"jakartowns_positions_{self._auth.user_id}",
                     params={
                         "config": {
                             "broadcast": {"ack": False, "self": False},
@@ -100,13 +105,17 @@ class RealTimeWorker(QObject):
 
                 while not self._stop_event.is_set():
                     try:
-                        message = self._broadcast_queue.get(block=False)
+                        message = self._thread_queue.get(block=False)
                     except queue.Empty:
                         message = None
 
                     if message:
-                        event, data = message
-                        await channel.send_broadcast(event=event, data=data)
+                        message_type, *message_data = message
+                        if message_type == "broadcast":
+                            event, data = message_data
+                            await channel.send_broadcast(event=event, data=data)
+                        elif message_type == "set_auth":
+                            await _realtime.set_auth(self._auth.access_token)  # type: ignore
                         continue
 
                     await asyncio.sleep(wait_step)

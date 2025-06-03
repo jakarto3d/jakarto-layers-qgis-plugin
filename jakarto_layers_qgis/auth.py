@@ -3,8 +3,9 @@ from dataclasses import dataclass
 from typing import Optional, Union
 
 import requests
+from PyQt5.QtCore import QObject, pyqtSignal
 from qgis.core import QgsApplication, QgsAuthMethodConfig
-from qgis.PyQt.QtCore import QSettings
+from qgis.PyQt.QtCore import QSettings, QTimer
 from qgis.PyQt.QtWidgets import (
     QDialog,
     QDialogButtonBox,
@@ -20,16 +21,24 @@ from .vendor import sentry_sdk
 AUTH_CONFIG_ID_KEY = "jakarto_auth_config_id"
 
 
-class JakartoAuthentication:
+class JakartoAuthentication(QObject):
+    access_token_updated = pyqtSignal()
+
     def __init__(self):
+        super().__init__()
         self._username: Optional[str] = None
         self._password: Optional[str] = None
 
-        self._user_id: Optional[str] = None
-        self._access_token: Optional[str] = None
+        self.user_id: Optional[str] = None
+        self.access_token: Optional[str] = None
         self._refresh_token: Optional[str] = None
 
         self._qsettings = QSettings("Jakarto", "JakartoPlugin")
+
+        # Refresh access token every 5 minutes
+        self._refresh_token_timer = QTimer(self)
+        self._refresh_token_timer.timeout.connect(self.refresh_access_token)
+        self._refresh_token_timer.setInterval(5 * 60 * 1000)
 
     def is_authenticated(self) -> bool:
         return self._username is not None and self._password is not None
@@ -61,14 +70,12 @@ class JakartoAuthentication:
             username, password = self._get_credentials_from_auth_database()
             if username and password and self._check_auth(username, password):
                 log(f"Using credentials from auth database: {username}")
-                self._set_credentials(username, password)
                 return True
             # check in settings, if we have credentials there, store them in auth database
             username, password = self.get_credentials_from_settings()
             if username and password and self._check_auth(username, password):
                 self._set_credentials_in_auth_database(username, password)
                 log(f"Stored credentials from settings in auth database: {username}")
-                self._set_credentials(username, password)
                 return True
             if ask:
                 while True:
@@ -78,7 +85,6 @@ class JakartoAuthentication:
                     if self._check_auth(username, password):
                         self._set_credentials_in_auth_database(username, password)
                         log(f"Stored credentials in auth database: {username}")
-                        self._set_credentials(username, password)
                         return True
                     log(f"Invalid credentials for username: {username}")
         else:
@@ -86,7 +92,6 @@ class JakartoAuthentication:
             username, password = self.get_credentials_from_settings()
             if username and password and self._check_auth(username, password):
                 log(f"Using credentials from settings: {username}")
-                self._set_credentials(username, password)
                 return True
             if ask:
                 while True:
@@ -96,7 +101,6 @@ class JakartoAuthentication:
                     if self._check_auth(username, password):
                         self._set_credentials_in_settings(username, password)
                         log(f"Stored credentials in settings: {username}")
-                        self._set_credentials(username, password)
                         return True
                     log(f"Invalid credentials for username: {username}")
 
@@ -113,24 +117,29 @@ class JakartoAuthentication:
             return False
 
         sentry_sdk.set_user({"email": username})
-        self._user_id = token_response.user_id
-        self._access_token = token_response.access_token
+        self.user_id = token_response.user_id
+        self.access_token = token_response.access_token
         self._refresh_token = token_response.refresh_token
 
+        self.access_token_updated.emit()
+        self._refresh_token_timer.start()
+
         return True
 
-    def refresh_access_token(self, session: Optional[requests.Session] = None) -> bool:
+    def refresh_access_token(self) -> bool:
         if self._refresh_token is None:
             return False
-        token_response = _get_token(refresh_token=self._refresh_token, session=session)
+        token_response = _get_token(refresh_token=self._refresh_token, session=None)
         if token_response is None:
             return False
-        self._access_token = token_response.access_token
-        return True
 
-    def _set_credentials(self, username: str, password: str) -> None:
-        self._username = username
-        self._password = password
+        self.access_token = token_response.access_token
+        self._refresh_token = token_response.refresh_token
+
+        self.access_token_updated.emit()
+        self._refresh_token_timer.start()
+
+        return True
 
     def _get_auth_config_id(self) -> str:
         """Get the stored authentication configuration ID from QSettings."""
