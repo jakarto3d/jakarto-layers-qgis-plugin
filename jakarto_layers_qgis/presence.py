@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from threading import Lock
 from time import time
 from typing import Optional
 
@@ -40,6 +41,7 @@ class PresenceManager(QObject):
         super().__init__()
         self._presence_layer: Optional[QgsVectorLayer] = None
         self._presence_states: dict[str, Optional[PresencePoint]] = {}
+        self._presence_states_lock = Lock()
         # _last_presence_point is to keep track of the last position that moved
         # so we can center the view on it
         self._last_presence_point: dict[str, PresencePoint] = {}
@@ -53,13 +55,15 @@ class PresenceManager(QObject):
             for joined in joined_presences:
                 if not (presence_client_id := joined.get("presence_client_id")):
                     continue
-                self._presence_states.setdefault(presence_client_id, None)
+                with self._presence_states_lock:
+                    self._presence_states.setdefault(presence_client_id, None)
 
         def on_presence_leave(key, curr_presences, left_presences):
             for left in left_presences:
                 if not (presence_client_id := left.get("presence_client_id")):
                     continue
-                self._presence_states.pop(presence_client_id, None)
+                with self._presence_states_lock:
+                    self._presence_states.pop(presence_client_id, None)
                 self._last_presence_point.pop(presence_client_id, None)
                 self.presence_update.emit()
 
@@ -71,13 +75,15 @@ class PresenceManager(QObject):
                 return
             if not all(k in payload for k in ["x", "y", "srid"]):
                 return
-            self._presence_states[presence_client_id] = PresencePoint(
+            presence_point = PresencePoint(
                 x=payload["x"],
                 y=payload["y"],
                 srid=payload["srid"],
                 rotation=payload.get("rotation", 0),
                 time=time(),
             )
+            with self._presence_states_lock:
+                self._presence_states[presence_client_id] = presence_point
             self.presence_update.emit()
 
         await (
@@ -143,7 +149,10 @@ class PresenceManager(QObject):
         provider.truncate()
 
         features = []
-        for client_id, presence_point in self._presence_states.items():
+
+        with self._presence_states_lock:
+            presence_states = list(self._presence_states.items())
+        for client_id, presence_point in presence_states:
             if presence_point is None:
                 continue
             feature = QgsFeature()
