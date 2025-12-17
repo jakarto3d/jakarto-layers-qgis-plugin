@@ -172,11 +172,10 @@ class Adapter(QObject):
         pt = point.asPoint()
 
         lon, lat = pt.x(), pt.y()
-        z = pt.z() if pt.is3D() and abs(pt.z()) > 0.0001 else None
 
         self._realtime_worker.enqueue_broadcast_message(
             "jakartowns_move_request",
-            {"lon": lon, "lat": lat, "z": z},
+            {"lon": lon, "lat": lat},
         )
 
     def get_all_layers(self, with_temporary_layers: bool = False) -> list[Layer]:
