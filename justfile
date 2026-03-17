@@ -14,8 +14,6 @@ venv:
     echo "Downloading vendor dependencies..."
     just vendorize
 
-    just compile
-
     echo "Activate the venv with: "
     echo ". .venv/bin/activate"
 
