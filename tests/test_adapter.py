@@ -1,5 +1,3 @@
-import gzip
-import json
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from unittest.mock import Mock
@@ -36,7 +34,6 @@ PLUGIN_NAME = "jakarto_layers_qgis"
 class Request:
     method: str
     url: str
-    data: bytes = b""
     params: dict = field(default_factory=dict)
     json: dict = field(default_factory=dict)
     headers: dict = field(default_factory=dict)
@@ -234,11 +231,8 @@ def test_create_sub_layer_3_features(
     request = Request(**points_post.kwargs)
     assert request.method == "POST"
     assert request.url == f"{supabase_url}/rest/v1/points"
-    assert request.headers["Content-Encoding"] == "gzip"
-    assert request.headers["Content-Type"] == "application/json"
-    payload = json.loads(gzip.decompress(request.data).decode("utf-8"))
-    assert payload[0]["layer_id"] == sub_layer_id
-    assert len(payload) == 3
+    assert request.json[0]["layer_id"] == sub_layer_id
+    assert len(request.json) == 3
 
 
 def test_merge_sub_layer(plugin, add_layer: Layer, mock_session):
@@ -470,11 +464,8 @@ def test_import_layer(plugin, clear_layers, mock_session):
     request = Request(**points_call.kwargs)
     assert request.method == "POST"
     assert request.url == f"{supabase_url}/rest/v1/points"
-    assert request.headers["Content-Encoding"] == "gzip"
-    assert request.headers["Content-Type"] == "application/json"
-    payload = json.loads(gzip.decompress(request.data).decode("utf-8"))
-    assert len(payload) == 9
-    assert payload[0]["attributes"]["fid"] == 1243
+    assert len(request.json) == 9
+    assert request.json[0]["attributes"]["fid"] == 1243
 
 
 def test_drop_layer(plugin, add_layer: Layer, mock_session):
