@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import gzip
+import json as json_lib
 from queue import Queue
 from typing import Any, Callable, Optional, overload
 
@@ -77,10 +79,15 @@ class Postgrest:
         if (geom := geom_type.pop()) != "point":
             raise ValueError("Only point geometry type is supported")
 
+        payload = [f.to_json() for f in features]
         self._request(
             "POST",
             geometry_type=geom,
-            json=[f.to_json() for f in features],
+            data=gzip.compress(json_lib.dumps(payload).encode("utf-8")),
+            headers={
+                "Content-Encoding": "gzip",
+                "Content-Type": "application/json",
+            },
             timeout=30,
         )
 
@@ -147,6 +154,8 @@ class Postgrest:
         rpc: Optional[str] = None,
         table_name: Optional[str] = None,
         geometry_type: Optional[str] = None,
+        data=None,
+        headers: Optional[dict[str, str]] = None,
         json=None,
         params: Optional[dict[str, Any]] = None,
         timeout: int = DEFAULT_TIMEOUT,
@@ -161,6 +170,8 @@ class Postgrest:
         rpc: Optional[str] = None,
         table_name: Optional[str] = None,
         geometry_type: Optional[str] = None,
+        data=None,
+        headers: Optional[dict[str, str]] = None,
         json=None,
         params: Optional[dict[str, Any]] = None,
         timeout: int = DEFAULT_TIMEOUT,
@@ -174,6 +185,8 @@ class Postgrest:
         rpc: Optional[str] = None,
         table_name: Optional[str] = None,
         geometry_type: Optional[str] = None,
+        data=None,
+        headers: Optional[dict[str, str]] = None,
         json=None,
         params: Optional[dict[str, Any]] = None,
         timeout: int = DEFAULT_TIMEOUT,
@@ -191,6 +204,7 @@ class Postgrest:
             "method": method,
             "url": url,
             "params": params,
+            "data": data,
             "json": json,
             "headers": {
                 "Authorization": f"Bearer {self._session.access_token}",
@@ -199,6 +213,8 @@ class Postgrest:
             "timeout": timeout,
             "verify": verify_ssl,
         }
+        if headers:
+            kwargs["headers"].update(headers)
         if callback is None:
             response = self._session.request(**kwargs)
             _raise_for_status(response)
