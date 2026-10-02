@@ -5,7 +5,7 @@ from pathlib import Path
 
 from qgis.core import Qgis
 
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 
 
 def _sentry_before_send(event, hint):
