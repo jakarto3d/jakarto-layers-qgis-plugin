@@ -1,0 +1,114 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v10.2.0
+
+      # Uses the ruff version pinned in .pre-commit-config.yaml
+      - run: uvx prek run --all-files --show-diff-on-failure
+
+  package:
+    runs-on: ubuntu-latest
+    outputs:
+      zip-name: ${{ steps.name.outputs.zip-name }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v10.2.0
+
+      - uses: extractions/setup-just@v4
+
+      - name: Install dependencies
+        # The vendored dependencies are resolved for the oldest supported Python (QGIS 3.22)
+        run: |
+          uv venv --python 3.9
+          uv pip install -r requirements-dev.txt
+
+      - run: just package
+
+      - name: Rename zip
+        id: name
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            suffix="$GITHUB_REF_NAME"
+          else
+            suffix="$(git rev-parse --short HEAD)"
+          fi
+          zip_name="jakarto_layers_qgis-${suffix}.zip"
+          mv jakarto_layers_qgis.zip "$zip_name"
+          echo "zip-name=$zip_name" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          path: ${{ steps.name.outputs.zip-name }}
+          archive: false
+          if-no-files-found: error
+
+  test:
+    needs: package
+    runs-on: ubuntu-latest
+    # Official QGIS images for 3.22 ship Python 3.8, which can't install our vendored deps
+    container: qgis/qgis:ltr
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v10.2.0
+
+      - uses: extractions/setup-just@v4
+
+      # Reuse the vendored dependencies from the packaged zip, so we test what we ship
+      - uses: actions/download-artifact@v8
+        with:
+          name: ${{ needs.package.outputs.zip-name }}
+          skip-decompress: true
+
+      - name: Extract vendored dependencies
+        env:
+          ZIP_NAME: ${{ needs.package.outputs.zip-name }}
+        run: python3 -c "import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall()" "$ZIP_NAME"
+
+      - name: Install dependencies
+        run: |
+          uv venv --system-site-packages --python /usr/bin/python3
+          uv pip install -r requirements-dev.txt
+
+      - run: just test
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: [lint, package, test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: ${{ needs.package.outputs.zip-name }}
+          skip-decompress: true
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ZIP_NAME: ${{ needs.package.outputs.zip-name }}
+        run: gh release create "$GITHUB_REF_NAME" "$ZIP_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes
