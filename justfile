@@ -9,7 +9,7 @@ venv:
     uv venv --system-site-packages --python /usr/bin/python3
     uv pip install -r requirements.txt
     uv pip install -r requirements-dev.txt
-    .venv/bin/pre-commit install
+    .venv/bin/prek install
 
     echo "Downloading vendor dependencies..."
     just vendorize
@@ -36,7 +36,7 @@ coverage:
 format:
     .venv/bin/ruff format
     .venv/bin/ruff check --fix
-    .venv/bin/pre-commit run --all-files
+    .venv/bin/prek run --all-files
 
 # Run QGIS with QGIS_PLUGINPATH=$(pwd)
 [linux]

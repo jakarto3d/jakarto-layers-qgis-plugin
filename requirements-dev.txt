@@ -1,7 +1,7 @@
 pyqt5-stubs
 ruff
 pytest
-pre-commit
+prek
 pytest-qgis
 coverage[toml]
 pip

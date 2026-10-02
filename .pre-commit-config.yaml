@@ -1,14 +1,14 @@
 minimum_pre_commit_version: "2.9.0"
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
         exclude: ^jakarto_layers_qgis/vendor/|.*\.patch$|metadata.txt
       - id: end-of-file-fixer
         exclude: ^jakarto_layers_qgis/vendor/|.*\.patch$
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.11.2
+    rev: v0.16.10
     hooks:
       - id: ruff
         name: ruff-check
