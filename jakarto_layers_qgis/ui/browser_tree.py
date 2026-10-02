@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import TYPE_CHECKING, Callable, Optional
+from typing import TYPE_CHECKING, Callable
 
 import sip
 from PyQt5.QtCore import QObject, pyqtSignal
@@ -97,7 +97,7 @@ class _DataItemProvider(QgsDataItemProvider):
         return QgsDataProvider.Net
 
     def createDataItem(
-        self, path: Optional[str] = None, parentItem: Optional[QgsDataItem] = None
+        self, path: str | None = None, parentItem: QgsDataItem | None = None
     ):
         sip.transferto(self.browser.root, None)
         return self.browser.root

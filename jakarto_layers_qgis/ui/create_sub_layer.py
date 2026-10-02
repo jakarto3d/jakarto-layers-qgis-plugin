@@ -1,5 +1,6 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Optional
 
 from qgis.PyQt.QtWidgets import (
     QDialog,
@@ -27,11 +28,11 @@ class CreateSubLayerDialog(QDialog):
     def __init__(
         self,
         layer: Layer,
-        parent: Optional[QWidget] = None,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.layer = layer
-        self.properties: Optional[SubLayerProperties] = None
+        self.properties: SubLayerProperties | None = None
         self.setup_ui()
 
     def setup_ui(self) -> None:

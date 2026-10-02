@@ -4,7 +4,7 @@ import threading
 import traceback
 import uuid
 from collections import defaultdict
-from typing import Any, Callable, Optional, Union
+from typing import Any, Callable
 
 import sip
 from PyQt5.QtCore import QObject, QPoint, QThread, pyqtBoundSignal
@@ -86,7 +86,7 @@ class Adapter(QObject):
     def _commit_callback(
         self,
         layer: Layer,
-        events: list[Union[QGISInsertEvent, QGISUpdateEvent, QGISDeleteEvent]],
+        events: list[QGISInsertEvent | QGISUpdateEvent | QGISDeleteEvent],
         layer_attributes_modified: bool,
     ) -> None:
         """Update the database tables after a qgis manual edit.
@@ -185,24 +185,24 @@ class Adapter(QObject):
             if with_temporary_layers or not layer.temporary
         ]
 
-    def get_layer(self, supabase_id: Optional[str]) -> Optional[Layer]:
+    def get_layer(self, supabase_id: str | None) -> Layer | None:
         if supabase_id is None:
             return None
         if supabase_id in self._all_layers:
             return self._all_layers[supabase_id]
         return None
 
-    def get_supabase_layer_id(self, qgis_layer: QgsVectorLayer) -> Optional[str]:
+    def get_supabase_layer_id(self, qgis_layer: QgsVectorLayer) -> str | None:
         return self._qgis_layer_id_to_supabase_id.get(qgis_layer.id())
 
-    def is_real_time_layer(self, qgis_layer: Optional[QgsVectorLayer]) -> bool:
+    def is_real_time_layer(self, qgis_layer: QgsVectorLayer | None) -> bool:
         if qgis_layer is None:
             return False
         return bool(self.get_supabase_layer_id(qgis_layer))
 
     def get_temp_jakartowns_sync_layer(
         self, qgis_layer: QgsVectorLayer
-    ) -> Optional[Layer]:
+    ) -> Layer | None:
         supabase_id = self.get_supabase_layer_id(qgis_layer)
         if supabase_id is None:
             return None
@@ -215,8 +215,8 @@ class Adapter(QObject):
         qgis_layer: QgsVectorLayer,
         qgis_features: list[QgsFeature],
         *,
-        layer_name: Optional[str] = None,
-        parent_layer: Optional[Layer] = None,
+        layer_name: str | None = None,
+        parent_layer: Layer | None = None,
         temporary_layer: bool = False,
     ) -> tuple[SupabaseLayer, list[SupabaseFeature]]:
         """Create a new supabase layer from a list of qgis features.
@@ -235,7 +235,7 @@ class Adapter(QObject):
         srid = qgis_layer.crs().authid()
         try:
             srid = int(srid.split(":")[-1])
-        except Exception:
+        except ValueError:
             raise ValueError(f"Unsupported CRS: {srid}")
 
         supabase_layer_id = str(uuid.uuid4())
@@ -350,7 +350,7 @@ class Adapter(QObject):
         return True
 
     def add_layer(
-        self, supabase_id: Optional[str], callback: Callable[[bool], Any]
+        self, supabase_id: str | None, callback: Callable[[bool], Any]
     ) -> None:
         if not (layer := self.get_layer(supabase_id)):
             callback(False)
@@ -374,7 +374,7 @@ class Adapter(QObject):
             callback=_sub_callback,
         )
 
-    def remove_layer(self, supabase_id: Optional[str]) -> bool:
+    def remove_layer(self, supabase_id: str | None) -> bool:
         if not (layer := self.get_layer(supabase_id)):
             return False
         if layer.supabase_layer_id not in self._loaded_layers:
@@ -503,7 +503,7 @@ class Adapter(QObject):
         self.stop_realtime()
         self._session.close()
 
-    def merge_sub_layer(self, supabase_id: Optional[str]) -> None:
+    def merge_sub_layer(self, supabase_id: str | None) -> None:
         if not (layer := self.get_layer(supabase_id)):
             return
         if layer.supabase_parent_layer_id is None:
@@ -546,7 +546,7 @@ class Adapter(QObject):
             level="success",
         )
 
-    def rename_layer(self, supabase_id: Optional[str], new_name: str) -> None:
+    def rename_layer(self, supabase_id: str | None, new_name: str) -> None:
         """Rename a layer.
 
         Args:

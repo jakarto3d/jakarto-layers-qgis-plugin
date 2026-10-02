@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable
 
 from PyQt5.QtCore import QEvent, QObject, QUrl
 from PyQt5.QtGui import QDesktopServices, QKeyEvent, QMouseEvent
@@ -65,7 +65,7 @@ class Plugin(QObject):
         self._drag_start_pos = False
         self._mouse_pos = None
 
-    def initGui(self) -> None:  # noqa N802
+    def initGui(self) -> None:
         self.toolbar = iface.addToolBar("Jakarto Real-Time Layers")
         self.toolbar.setObjectName("Jakarto Real-Time Layers")
         self.menu = QMenu("Jakarto Real-Time Layers")
@@ -267,12 +267,12 @@ class Plugin(QObject):
         *,
         add_to_menu: bool = True,
         add_to_toolbar: bool = True,
-        status_tip: Optional[str] = None,
-        whats_this: Optional[str] = None,
-        parent: Optional[QWidget] = None,
+        status_tip: str | None = None,
+        whats_this: str | None = None,
+        parent: QWidget | None = None,
         enabled: bool = True,
         checkable: bool = False,
-        object_name: Optional[str] = None,
+        object_name: str | None = None,
     ) -> QAction:
         """Add a toolbar icon to the toolbar.
 
@@ -336,7 +336,7 @@ class Plugin(QObject):
                 return action
         raise ValueError(f"Action with object name {object_name} not found")
 
-    def is_layer_syncable(self, qgis_layer: Optional[QgsMapLayer]) -> bool:
+    def is_layer_syncable(self, qgis_layer: QgsMapLayer | None) -> bool:
         return (
             qgis_layer is not None
             and hasattr(qgis_layer, "geometryType")
@@ -351,7 +351,7 @@ class Plugin(QObject):
             layer is not None and layer.customProperty(property_name, None) is not None
         )
 
-    def on_current_layer_changed(self, layer: Optional[QgsMapLayer] = None) -> None:
+    def on_current_layer_changed(self, layer: QgsMapLayer | None = None) -> None:
         if layer is None:
             layer = iface.activeLayer()
 

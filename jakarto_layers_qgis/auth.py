@@ -1,6 +1,7 @@
+from __future__ import annotations
+
 import time
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import requests
 from PyQt5.QtCore import QObject, pyqtSignal
@@ -26,12 +27,12 @@ class JakartoAuthentication(QObject):
 
     def __init__(self):
         super().__init__()
-        self._username: Optional[str] = None
-        self._password: Optional[str] = None
+        self._username: str | None = None
+        self._password: str | None = None
 
-        self.user_id: Optional[str] = None
-        self.access_token: Optional[str] = None
-        self._refresh_token: Optional[str] = None
+        self.user_id: str | None = None
+        self.access_token: str | None = None
+        self._refresh_token: str | None = None
 
         self._qsettings = QSettings("Jakarto", "JakartoPlugin")
 
@@ -149,7 +150,7 @@ class JakartoAuthentication(QObject):
         """Store the authentication configuration ID in QSettings."""
         self._qsettings.setValue(AUTH_CONFIG_ID_KEY, authcfg)
 
-    def get_credentials_from_settings(self) -> tuple[Optional[str], Optional[str]]:
+    def get_credentials_from_settings(self) -> tuple[str | None, str | None]:
         """Get credentials from QSettings if they exist."""
         username = self._qsettings.value("jakartowns/username")
         password = self._qsettings.value("jakartowns/password")
@@ -181,7 +182,7 @@ class JakartoAuthentication(QObject):
 
     def _get_credentials_from_auth_database(
         self,
-    ) -> tuple[Optional[str], Optional[str]]:
+    ) -> tuple[str | None, str | None]:
         """Get credentials from the authentication database."""
         auth_mgr = QgsApplication.authManager()
         if not self._is_auth_database_set():
@@ -189,15 +190,17 @@ class JakartoAuthentication(QObject):
         authcfg = self._get_auth_config_id()
         if authcfg and authcfg in auth_mgr.configIds():
             config = QgsAuthMethodConfig()
-            if auth_mgr.loadAuthenticationConfig(authcfg, config, True):
-                if config.isValid():
-                    username = config.config("username")
-                    password = config.config("password")
-                    if isinstance(username, bytes):
-                        username = username.decode()
-                    if isinstance(password, bytes):
-                        password = password.decode()
-                    return username, password
+            if (
+                auth_mgr.loadAuthenticationConfig(authcfg, config, True)
+                and config.isValid()
+            ):
+                username = config.config("username")
+                password = config.config("password")
+                if isinstance(username, bytes):
+                    username = username.decode()
+                if isinstance(password, bytes):
+                    password = password.decode()
+                return username, password
         return None, None
 
     def _set_credentials_in_auth_database(self, username: str, password: str) -> None:
@@ -218,7 +221,7 @@ class JakartoAuthentication(QObject):
 
 def _ask_credentials(
     in_qsettings: bool = False,
-) -> Union[tuple[str, str], tuple[None, None]]:
+) -> tuple[str, str] | tuple[None, None]:
     """Ask for credentials and store them in the authentication database."""
     description = "Please enter your credentials to access Jakarto services."
     if in_qsettings:
@@ -290,11 +293,11 @@ class _TokenResponse:
 
 def _get_token(
     *_,
-    username: Optional[str] = None,
-    password: Optional[str] = None,
-    refresh_token: Optional[str] = None,
-    session: Optional[requests.Session] = None,
-) -> Optional[_TokenResponse]:
+    username: str | None = None,
+    password: str | None = None,
+    refresh_token: str | None = None,
+    session: requests.Session | None = None,
+) -> _TokenResponse | None:
     if (username is None or password is None) and not refresh_token:
         raise ValueError("Either username and password or refresh token is required")
     if not refresh_token:

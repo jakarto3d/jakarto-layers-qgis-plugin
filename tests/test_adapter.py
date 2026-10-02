@@ -166,7 +166,7 @@ def test_add_layer(plugin, add_layer: Layer):
     features = list(layer_node.layer().getFeatures())
     assert len(features) == 9
 
-    geom = list(features[0].geometry().vertices())[0]
+    geom = next(iter(features[0].geometry().vertices()))
     assert geom.x() == 243778.215
     assert geom.y() == 5178023.057
     assert geom.z() == 29.817
@@ -297,7 +297,7 @@ def test_add_feature_in_qgis(add_layer: Layer, mock_session):
 
 def test_update_feature_in_qgis(add_layer: Layer, mock_session):
     # given
-    qgis_feature = list(add_layer.qgis_layer.getFeatures())[0]
+    qgis_feature = next(iter(add_layer.qgis_layer.getFeatures()))
 
     # when
     add_layer.qgis_layer.startEditing()
@@ -316,7 +316,7 @@ def test_update_feature_in_qgis(add_layer: Layer, mock_session):
 
 def test_delete_feature_in_qgis(add_layer: Layer, mock_session):
     # given
-    qgis_feature = list(add_layer.qgis_layer.getFeatures())[0]
+    qgis_feature = next(iter(add_layer.qgis_layer.getFeatures()))
     supabase_id = add_layer.get_supabase_feature_id(qgis_feature.id())
 
     # when
@@ -436,7 +436,7 @@ def test_import_layer(plugin, clear_layers, mock_session):
 
     # then
     assert len(plugin.adapter._all_layers) == 1
-    layer = list(plugin.adapter._all_layers.values())[0]
+    layer = next(iter(plugin.adapter._all_layers.values()))
     assert layer.name == "road_signs_sample"
     assert layer.geometry_type == "point"
     assert layer.attributes == [

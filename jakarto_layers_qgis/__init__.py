@@ -12,7 +12,7 @@ def _sentry_before_send(event, hint):
     try:
         # Check if this is an exception
         if "exc_info" in hint:
-            _, exc_value, tb = hint["exc_info"]
+            _, _exc_value, tb = hint["exc_info"]
             stack_summary = traceback.extract_tb(tb)
 
             # Check if any frame in the traceback is from your package
@@ -20,7 +20,7 @@ def _sentry_before_send(event, hint):
                 if "jakarto_layers_qgis" in frame.filename:
                     return event  # Send to Sentry
             return None  # Ignore
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass  # Fail safe
 
     return None  # Default to ignore

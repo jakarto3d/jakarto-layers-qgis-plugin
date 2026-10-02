@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 from dataclasses import asdict, dataclass
 from datetime import date, datetime
-from typing import Any, Optional
+from typing import Any
 
 from .constants import geometry_postgis_to_alias
 
@@ -14,7 +14,7 @@ class SupabaseFeature:
     layer_id: str
     attributes: dict[str, Any]
     geom: dict[str, Any]
-    parent_id: Optional[str] = None
+    parent_id: str | None = None
 
     @classmethod
     def from_json(cls, json_data: dict[str, Any]) -> SupabaseFeature:
@@ -40,10 +40,9 @@ class SupabaseFeature:
         return data
 
     def _jsonize_value(self, value: Any) -> Any:
-        if isinstance(value, float):
-            if math.isnan(value) or math.isinf(value):
-                # postgrest doesn't support nan or inf in json
-                value = None
+        # postgrest doesn't support nan or inf in json
+        if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
+            value = None
         if isinstance(value, (int, str, float, bool)):
             return value
         elif isinstance(value, (list, tuple)):
@@ -80,7 +79,7 @@ class SupabaseLayer:
     geometry_type: str
     attributes: list[LayerAttribute]
     srid: int
-    parent_id: Optional[str] = None
+    parent_id: str | None = None
     temporary: bool = False
 
     def to_json(self) -> dict[str, Any]:

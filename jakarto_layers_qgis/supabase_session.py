@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import contextlib
 import time
-from typing import Optional
 
 import requests
 
@@ -14,7 +13,7 @@ class SupabaseSession:
     _session_max_age = 5 * 60
 
     def __init__(self, auth: JakartoAuthentication) -> None:
-        self._session: Optional[requests.Session] = None
+        self._session: requests.Session | None = None
         self._session_time = time.time()
         self._auth = auth
 
@@ -37,7 +36,7 @@ class SupabaseSession:
 
     @property
     def access_token(self) -> str:
-        self.session  # refresh token if needed
+        _ = self.session  # refresh token if needed
         if not self._auth.access_token:
             raise RuntimeError("Could not get access token")
         return self._auth.access_token

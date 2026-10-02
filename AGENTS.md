@@ -53,7 +53,8 @@ Use the `justfile` instead of inventing ad hoc commands.
 
 ## Repo-Specific Rules
 
-- Preserve Python 3.9 compatibility. Do not introduce `match`, `str | None`, or other newer-only syntax.
+- Preserve Python 3.9 compatibility. Do not introduce `match` or other newer-only syntax.
+- Use `X | None` / `X | Y` in annotations, with `from __future__ import annotations` at the top of the module. Never use `|` between types outside annotations (type aliases, `cast()`, `isinstance()`): it is evaluated at runtime and fails on Python 3.9.
 - Do not expand geometry support casually. Point-only assumptions exist in converters, layer creation, tests, UI text, and metadata.
 - Avoid direct edits under `jakarto_layers_qgis/vendor/`. Change `requirements-vendor.txt` and rerun `just vendorize`; keep any necessary patching in `vendoring-patches/`.
 - Keep `requirements.txt` limited to packages expected to already exist in the QGIS Python environment. Third-party runtime deps belong in `requirements-vendor.txt`.

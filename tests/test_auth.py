@@ -1,4 +1,5 @@
-from typing import Optional
+from __future__ import annotations
+
 from unittest.mock import Mock, call
 
 from qgis.core import QgsAuthManager
@@ -11,10 +12,10 @@ def setup_mocks(
     monkeypatch,
     *_,
     is_auth_database_set: bool = True,
-    auth_config_id: Optional[str] = None,
-    auth_config: Optional[tuple[str, str]] = None,
-    auth_settings: tuple[Optional[str], Optional[str]] = (None, None),
-    ask_credentials_return_value: tuple[Optional[str], Optional[str]] = (None, None),
+    auth_config_id: str | None = None,
+    auth_config: tuple[str, str] | None = None,
+    auth_settings: tuple[str | None, str | None] = (None, None),
+    ask_credentials_return_value: tuple[str | None, str | None] = (None, None),
 ):
     auth_manager = Mock(spec=QgsAuthManager)
     monkeypatch.setattr(

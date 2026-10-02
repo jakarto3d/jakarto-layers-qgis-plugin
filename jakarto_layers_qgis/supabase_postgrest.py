@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from queue import Queue
-from typing import Any, Callable, Optional, overload
+from typing import Any, Callable, overload
 
 import requests
 from qgis.core import QgsApplication, QgsTask
@@ -71,7 +71,7 @@ class Postgrest:
         )
 
     def add_features(self, features: list[SupabaseFeature]) -> None:
-        geom_type = set(feature.geometry_type for feature in features)
+        geom_type = {feature.geometry_type for feature in features}
         if len(geom_type) != 1:
             raise ValueError("All features must have the same geometry type")
         if (geom := geom_type.pop()) != "point":
@@ -144,11 +144,11 @@ class Postgrest:
         method: str,
         *,
         callback: None = None,
-        rpc: Optional[str] = None,
-        table_name: Optional[str] = None,
-        geometry_type: Optional[str] = None,
+        rpc: str | None = None,
+        table_name: str | None = None,
+        geometry_type: str | None = None,
         json=None,
-        params: Optional[dict[str, Any]] = None,
+        params: dict[str, Any] | None = None,
         timeout: int = DEFAULT_TIMEOUT,
     ) -> requests.Response: ...
 
@@ -158,11 +158,11 @@ class Postgrest:
         method: str,
         *,
         callback: Callable,
-        rpc: Optional[str] = None,
-        table_name: Optional[str] = None,
-        geometry_type: Optional[str] = None,
+        rpc: str | None = None,
+        table_name: str | None = None,
+        geometry_type: str | None = None,
         json=None,
-        params: Optional[dict[str, Any]] = None,
+        params: dict[str, Any] | None = None,
         timeout: int = DEFAULT_TIMEOUT,
     ) -> None: ...
 
@@ -170,14 +170,14 @@ class Postgrest:
         self,
         method: str,
         *,
-        callback: Optional[Callable] = None,
-        rpc: Optional[str] = None,
-        table_name: Optional[str] = None,
-        geometry_type: Optional[str] = None,
+        callback: Callable | None = None,
+        rpc: str | None = None,
+        table_name: str | None = None,
+        geometry_type: str | None = None,
         json=None,
-        params: Optional[dict[str, Any]] = None,
+        params: dict[str, Any] | None = None,
         timeout: int = DEFAULT_TIMEOUT,
-    ) -> Optional[requests.Response]:
+    ) -> requests.Response | None:
         if table_name is None and geometry_type is None and not rpc:
             raise ValueError("Either table_name or geometry_type must be provided")
         if table_name is None:
@@ -257,6 +257,6 @@ def _raise_for_status(response: requests.Response) -> None:
         if content_type.startswith("application/json"):
             try:
                 error = e.response.json()["message"]
-            except Exception:
+            except Exception:  # noqa: BLE001, S110
                 pass
         raise requests.HTTPError(f"({e.response.status_code}) {error}")

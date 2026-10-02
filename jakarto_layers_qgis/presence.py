@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 from threading import Lock
 from time import time
-from typing import Optional
 
 import sip
 from PyQt5.QtCore import QObject, pyqtSignal
@@ -39,8 +40,8 @@ class PresenceManager(QObject):
 
     def __init__(self) -> None:
         super().__init__()
-        self._presence_layer: Optional[QgsVectorLayer] = None
-        self._presence_states: dict[str, Optional[PresencePoint]] = {}
+        self._presence_layer: QgsVectorLayer | None = None
+        self._presence_states: dict[str, PresencePoint | None] = {}
         self._presence_states_lock = Lock()
         # _last_presence_point is to keep track of the last position that moved
         # so we can center the view on it

@@ -1,6 +1,7 @@
+from __future__ import annotations
+
 import os
 from pathlib import Path
-from typing import Union
 
 from qgis.core import Qgis
 from qgis.PyQt.QtCore import QMetaType, QVariant
@@ -73,7 +74,7 @@ qmetatype_to_python: dict[QMetaType, str] = {
     QMetaType.QDateTime: "datetime",
 }
 
-python_to_qmetatype: dict[str, Union[QMetaType, QVariant]]
+python_to_qmetatype: dict[str, QMetaType | QVariant]
 if QGIS_VERSION_INT >= 33800:
     python_to_qmetatype = {
         "bool": QMetaType.Bool,
