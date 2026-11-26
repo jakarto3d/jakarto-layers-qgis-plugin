@@ -120,6 +120,14 @@ class Plugin(QObject):
             parent=iface.mainWindow(),
             object_name="create_sub_layer",
         )
+        self.add_action(
+            QIcon(),
+            text="Sign out of Jakarto",
+            callback=self.sign_out,
+            parent=iface.mainWindow(),
+            add_to_toolbar=False,
+            object_name="sign_out",
+        )
 
         self.remove_all_presence_layers()
 
@@ -201,6 +209,17 @@ class Plugin(QObject):
         # from the main thread...
         self.start_realtime_signal.emit()
         return True
+
+    def sign_out(self) -> None:
+        """End a browser sign-in (shared with plugin-qgis)."""
+        self._auth.sign_out()
+        # The realtime thread is created once per plugin load and cannot be
+        # restarted after stop_realtime(), so open layers keep their connection
+        # until QGIS restarts; no new token is fetched for them.
+        notify(
+            "Signed out. Layers already open stay connected until QGIS restarts.",
+            duration=8,
+        )
 
     def on_has_presence_point(self, value: bool) -> None:
         self._has_presence_point = value
