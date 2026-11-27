@@ -5,9 +5,8 @@ import time
 from dataclasses import dataclass
 
 import requests
-from PyQt5.QtCore import QObject, pyqtSignal
 from qgis.core import QgsApplication, QgsAuthMethodConfig
-from qgis.PyQt.QtCore import QSettings, QTimer
+from qgis.PyQt.QtCore import QObject, QSettings, QTimer, pyqtSignal
 from qgis.PyQt.QtWidgets import (
     QDialog,
     QDialogButtonBox,
@@ -159,7 +158,7 @@ class JakartoAuthentication(QObject):
 
         session = requests.Session()
         dialog = BrowserSignInDialog(session)
-        if dialog.exec_() != QDialog.Accepted:
+        if dialog.exec() != QDialog.DialogCode.Accepted:
             if dialog.error:
                 log(f"Browser sign-in failed: {dialog.error}")
             return False
@@ -332,7 +331,7 @@ def _ask_credentials(
         title="Jakarto Authentication",
         description=description,
     )
-    if dialog.exec_() == QDialog.Accepted:
+    if dialog.exec() == QDialog.DialogCode.Accepted:
         if dialog.browser_requested:
             return BROWSER_SIGN_IN, None
         username = dialog.username_edit.text()
@@ -346,7 +345,7 @@ class _AuthDialog(QDialog):
         super().__init__()
         self.username_edit = QLineEdit()
         self.password_edit = QLineEdit()
-        self.password_edit.setEchoMode(QLineEdit.Password)
+        self.password_edit.setEchoMode(QLineEdit.EchoMode.Password)
         self.browser_requested = False
         self.browser_button = QPushButton("Sign in with your browser")
         self.browser_button.clicked.connect(self._request_browser)
@@ -371,7 +370,9 @@ def _make_auth_dialog(
     username_label = QLabel(username_label)
     password_label = QLabel(password_label)
 
-    button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+    button_box = QDialogButtonBox(
+        QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+    )
     button_box.accepted.connect(dialog.accept)
     button_box.rejected.connect(dialog.reject)
 

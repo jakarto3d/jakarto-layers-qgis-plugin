@@ -1,10 +1,9 @@
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 from typing import Callable
 
-from PyQt5.QtCore import QEvent, QObject, QUrl
-from PyQt5.QtGui import QDesktopServices, QKeyEvent, QMouseEvent
 from qgis.core import (
     QgsApplication,
     QgsCoordinateReferenceSystem,
@@ -15,8 +14,8 @@ from qgis.core import (
 )
 from qgis.gui import QgisInterface
 from qgis.PyQt import sip
-from qgis.PyQt.QtCore import QPoint, Qt, QThread, pyqtSignal
-from qgis.PyQt.QtGui import QIcon
+from qgis.PyQt.QtCore import QEvent, QObject, QPoint, Qt, QThread, QUrl, pyqtSignal
+from qgis.PyQt.QtGui import QDesktopServices, QIcon, QKeyEvent, QMouseEvent
 from qgis.PyQt.QtWidgets import (
     QAction,
     QDialog,
@@ -131,7 +130,9 @@ class Plugin(QObject):
 
         self.remove_all_presence_layers()
 
-        self.connect_signal(self.start_realtime_signal, self.adapter.start_realtime)
+        # Created here, in the main thread; the property also connects
+        # start_realtime_signal to it.
+        _ = self.adapter
 
         if hasattr(iface, "projectRead"):
             # this is not available in tests
@@ -195,6 +196,10 @@ class Plugin(QObject):
             self.connect_signal(
                 adapter.has_presence_point_signal, self.on_has_presence_point
             )
+            # Bound to the adapter itself, not to a method of the plugin: the
+            # signal can be emitted outside the main thread (see connect_auth),
+            # and only a connection to the adapter is queued to it reliably.
+            self.connect_signal(self.start_realtime_signal, adapter.start_realtime)
             self.on_current_layer_changed()
             self._adapter = adapter
         return self._adapter
@@ -211,15 +216,44 @@ class Plugin(QObject):
         return True
 
     def sign_out(self) -> None:
-        """End a browser sign-in (shared with plugin-qgis)."""
+        """End a browser sign-in (shared with plugin-qgis) and cut the connections.
+
+        The real-time layers are removed from the map, as when the plugin is
+        unloaded: without a session they could no longer stay in sync. A new
+        adapter, with a new realtime thread, is ready for the next sign-in.
+        """
+        self._close_adapter()
         self._auth.sign_out()
-        # The realtime thread is created once per plugin load and cannot be
-        # restarted after stop_realtime(), so open layers keep their connection
-        # until QGIS restarts; no new token is fetched for them.
-        notify(
-            "Signed out. Layers already open stay connected until QGIS restarts.",
-            duration=8,
-        )
+        notify("Signed out of Jakarto.", duration=5)
+
+    def _close_adapter(self) -> None:
+        adapter = self._adapter
+        if adapter is None:
+            return
+        self._adapter = None
+
+        # What the adapter property connected to this adapter.
+        with contextlib.suppress(TypeError, RuntimeError):
+            self.get_action("jakartowns_follow").toggled.disconnect(
+                adapter.set_jakartowns_follow
+            )
+        for signal, callback in (
+            (adapter.has_presence_point_signal, self.on_has_presence_point),
+            (self.start_realtime_signal, adapter.start_realtime),
+        ):
+            if (signal, callback) in self._signals:
+                self._signals.remove((signal, callback))
+                with contextlib.suppress(TypeError, RuntimeError):
+                    signal.disconnect(callback)
+
+        adapter.close()
+        # stop_realtime() has the thread delete itself, and a QThread cannot be
+        # started twice anyway.
+        self._realtime_thread = QThread()
+        self.on_has_presence_point(False)
+        # Made now, from the menu action in the main thread, rather than on
+        # demand from connect_auth, which can run elsewhere.
+        _ = self.adapter
 
     def on_has_presence_point(self, value: bool) -> None:
         self._has_presence_point = value
@@ -521,7 +555,7 @@ class Plugin(QObject):
         dialog = CreateSubLayerDialog(parent=iface.mainWindow(), layer=layer)
 
         accepted = QDialog.DialogCode.Accepted
-        if dialog.exec_() == accepted and dialog.properties:
+        if dialog.exec() == accepted and dialog.properties:
             self.adapter.create_sub_layer(layer, dialog.properties.name)
             self.reload_layers(fetch_layers=False)
             iface.mapCanvas().refresh()

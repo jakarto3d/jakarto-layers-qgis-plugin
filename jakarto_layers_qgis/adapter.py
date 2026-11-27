@@ -6,8 +6,6 @@ import uuid
 from collections import defaultdict
 from typing import Any, Callable
 
-import sip
-from PyQt5.QtCore import QObject, QPoint, QThread, pyqtBoundSignal
 from qgis.core import (
     QgsCoordinateReferenceSystem,
     QgsCoordinateTransform,
@@ -17,6 +15,8 @@ from qgis.core import (
     QgsVectorLayer,
 )
 from qgis.gui import QgisInterface, QgsMapCanvas
+from qgis.PyQt import sip
+from qgis.PyQt.QtCore import QObject, QPoint, QThread, pyqtBoundSignal
 from qgis.utils import iface
 
 from .auth import JakartoAuthentication
@@ -489,7 +489,7 @@ class Adapter(QObject):
             and not self._realtime_thread.isFinished()
         ):
             self._realtime_thread.quit()
-            self._realtime_thread.wait(msecs=300)
+            self._realtime_thread.wait(300)  # milliseconds; the keyword is gone in Qt6
             self._realtime_thread.deleteLater()
 
         self._realtime_thread_event = None

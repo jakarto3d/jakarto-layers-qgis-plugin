@@ -4,8 +4,6 @@ from dataclasses import dataclass
 from threading import Lock
 from time import time
 
-import sip
-from PyQt5.QtCore import QObject, pyqtSignal
 from qgis.core import (
     QgsCoordinateReferenceSystem,
     QgsCoordinateTransform,
@@ -21,6 +19,8 @@ from qgis.core import (
     QgsVectorLayer,
 )
 from qgis.gui import QgisInterface
+from qgis.PyQt import sip
+from qgis.PyQt.QtCore import QObject, pyqtSignal
 from qgis.utils import iface
 
 from .constants import python_to_qmetatype
