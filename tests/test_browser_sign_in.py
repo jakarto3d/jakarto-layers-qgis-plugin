@@ -206,3 +206,23 @@ def test_sign_out_forgets_the_shared_browser_session(settings, monkeypatch):
     assert len(ended) == 1
     assert browser_sign_in.SESSION_SETTING not in settings
     assert authentication.access_token is None
+
+
+def test_sign_out_also_forgets_a_saved_password(settings, monkeypatch):
+    # Otherwise the next connection signs straight back in with it.
+    settings["jakartowns/username"] = "me@example.com"
+    settings["jakartowns/password"] = "secret"
+    settings[auth.AUTH_CONFIG_ID_KEY] = "cfg-1"
+    auth_manager = Mock()
+    auth_manager.configIds.return_value = ["cfg-1"]
+    monkeypatch.setattr(
+        auth, "QgsApplication", Mock(authManager=Mock(return_value=auth_manager))
+    )
+
+    JakartoAuthentication().sign_out()
+
+    assert "jakartowns/password" not in settings
+    assert auth.AUTH_CONFIG_ID_KEY not in settings
+    auth_manager.removeAuthenticationConfig.assert_called_once_with("cfg-1")
+    # the address stays, to fill the form next time
+    assert settings["jakartowns/username"] == "me@example.com"

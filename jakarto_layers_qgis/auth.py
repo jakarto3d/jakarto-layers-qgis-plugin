@@ -173,13 +173,29 @@ class JakartoAuthentication(QObject):
         return True
 
     def sign_out(self) -> None:
-        """End a browser sign-in, here and in plugin-qgis."""
+        """Sign out of Jakarto, here and in plugin-qgis.
+
+        Ends a browser sign-in and forgets a saved password too: otherwise the
+        next connection would quietly sign in again with it, and signing out
+        would seem to do nothing. The email address is kept, to fill the form.
+        Both plugins keep the password under the same QSettings key.
+        """
         if self._jakarto_session is not None:
             browser_sign_in.sign_out(self._jakarto_session)
         self._qsettings.remove(browser_sign_in.SESSION_SETTING)
         self._jakarto_session = None
         self.access_token = None
         self._refresh_token_timer.stop()
+        self._forget_saved_password()
+
+    def _forget_saved_password(self) -> None:
+        self._qsettings.remove("jakartowns/password")
+        authcfg = self._get_auth_config_id()
+        if authcfg:
+            auth_mgr = QgsApplication.authManager()
+            if authcfg in auth_mgr.configIds():
+                auth_mgr.removeAuthenticationConfig(authcfg)
+            self._qsettings.remove(AUTH_CONFIG_ID_KEY)
 
     def _restore_browser_session(self) -> bool:
         saved = self._qsettings.value(browser_sign_in.SESSION_SETTING)
