@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import time
 from dataclasses import dataclass
 
@@ -16,7 +15,7 @@ from qgis.PyQt.QtWidgets import (
     QVBoxLayout,
 )
 
-from . import browser_sign_in
+from . import browser_sign_in, session_store
 from .constants import anon_key, auth_url, supabase_url, verify_ssl
 from .messages import log
 from .vendor import sentry_sdk
@@ -156,19 +155,21 @@ class JakartoAuthentication(QObject):
         # imported here: the dialog needs a running QApplication
         from .browser_sign_in_dialog import BrowserSignInDialog
 
-        session = requests.Session()
+        session = _new_session()
         dialog = BrowserSignInDialog(session)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             if dialog.error:
                 log(f"Browser sign-in failed: {dialog.error}")
             return False
-        if not self._use_browser_session(session):
+        if self._use_browser_session(session) != browser_sign_in.VALID:
+            # The account session was just opened on the server: end it rather
+            # than leave it valid with nothing on this side knowing about it.
+            browser_sign_in.sign_out(session)
             return False
+        # A browser sign-in saved earlier is replaced: end it on the server.
+        self._end_saved_browser_session()
         # kept so the next QGIS session does not ask again; shared with plugin-qgis
-        self._qsettings.setValue(
-            browser_sign_in.SESSION_SETTING,
-            json.dumps(browser_sign_in.export_cookies(session)),
-        )
+        session_store.save(browser_sign_in.export_cookies(session))
         log("Signed in with the browser")
         return True
 
@@ -182,10 +183,18 @@ class JakartoAuthentication(QObject):
         """
         if self._jakarto_session is not None:
             browser_sign_in.sign_out(self._jakarto_session)
-        self._qsettings.remove(browser_sign_in.SESSION_SETTING)
+        else:
+            # a browser sign-in saved by plugin-qgis, or before this password one
+            self._end_saved_browser_session()
+        session_store.clear()
         self._jakarto_session = None
+        self.user_id = None
         self.access_token = None
+        self._refresh_token = None
+        self._username = None
+        self._password = None
         self._refresh_token_timer.stop()
+        sentry_sdk.set_user(None)
         self._forget_saved_password()
 
     def _forget_saved_password(self) -> None:
@@ -198,26 +207,46 @@ class JakartoAuthentication(QObject):
             self._qsettings.remove(AUTH_CONFIG_ID_KEY)
 
     def _restore_browser_session(self) -> bool:
-        saved = self._qsettings.value(browser_sign_in.SESSION_SETTING)
-        if not saved:
+        cookies = session_store.load()
+        if not cookies:
             return False
-        try:
-            cookies = json.loads(saved)
-        except (TypeError, ValueError):
-            return False
-        session = requests.Session()
+        session = _new_session()
         browser_sign_in.restore_cookies(session, cookies)
-        if self._use_browser_session(session):
+        state = self._use_browser_session(session)
+        if state == browser_sign_in.VALID:
             log("Using the browser sign-in")
             return True
+        # Forgotten only when refused: a network hiccup must not sign anyone
+        # out, and an expired session must not be retried on every action.
+        if state == browser_sign_in.REJECTED:
+            session_store.clear()
         return False
 
-    def _use_browser_session(self, session: requests.Session) -> bool:
+    def _end_saved_browser_session(self) -> None:
+        """End the saved browser sign-in on the server, then forget it."""
+        cookies = session_store.load()
+        if cookies:
+            session = _new_session()
+            browser_sign_in.restore_cookies(session, cookies)
+            browser_sign_in.sign_out(session)
+        session_store.clear()
+
+    def _use_browser_session(self, session: requests.Session) -> str:
+        """Take Supabase access from a Jakarto session: VALID, REJECTED (the
+        session is no longer accepted) or UNKNOWN (Jakarto could not be asked)."""
         try:
             token = browser_sign_in.supabase_token(session, supabase_url)
+        except requests.HTTPError as e:
+            status = e.response.status_code if e.response is not None else None
+            log(f"The Jakarto session was not accepted for Supabase: {e}")
+            return (
+                browser_sign_in.REJECTED
+                if status in (401, 403)
+                else browser_sign_in.UNKNOWN
+            )
         except (requests.RequestException, KeyError, ValueError) as e:
             log(f"Could not get a Supabase token from the Jakarto session: {e}")
-            return False
+            return browser_sign_in.UNKNOWN
         self._jakarto_session = session
         self._refresh_token = None
         self.user_id = token.user_id
@@ -225,7 +254,7 @@ class JakartoAuthentication(QObject):
 
         self.access_token_updated.emit()
         self._refresh_token_timer.start()
-        return True
+        return browser_sign_in.VALID
 
     def refresh_access_token(self) -> bool:
         if self._jakarto_session is not None:
@@ -415,6 +444,13 @@ def _make_auth_dialog(
     dialog.setLayout(layout)
 
     return dialog
+
+
+def _new_session() -> requests.Session:
+    session = requests.Session()
+    # JAKARTO_VERIFY_SSL=false, honoured like every other request of the plugin
+    session.verify = verify_ssl
+    return session
 
 
 @dataclass

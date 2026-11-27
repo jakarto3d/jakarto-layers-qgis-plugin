@@ -29,8 +29,11 @@ CLIENT_ID = "jakarto-layers-qgis-plugin"
 # Shared with plugin-qgis, which uses the same QSettings("Jakarto", "JakartoPlugin").
 SESSION_SETTING = "jakartowns/browser_session"
 
-# seconds (connect, read): polled from the QGIS interface thread, keep it short
-_REQUEST_TIMEOUT = (5, 5)
+# seconds (connect, read). These requests run on the QGIS interface thread, so
+# a network that does not answer freezes QGIS for as long as this: at most
+# about 3 s. A poll or a check that times out is retried, or reported as
+# "try again", so giving up early costs nothing.
+_REQUEST_TIMEOUT = (1.5, 1.5)
 
 
 class BrowserSignInError(Exception):
@@ -61,17 +64,27 @@ def request_device_code(session: requests.Session) -> DeviceCode:
     )
     if not response.ok:
         raise BrowserSignInError(_describe_error(response))
-    data = response.json()
-    return DeviceCode(
-        device_code=data["device_code"],
-        user_code=data["user_code"],
-        verification_uri=data["verification_uri"],
-        verification_uri_complete=data.get("verification_uri_complete")
-        or data["verification_uri"],
-        expires_in=int(data["expires_in"]),
-        interval=int(data.get("interval", 5)),
-    )
+    # A captive portal or a proxy can answer 200 with something else entirely.
+    try:
+        data = response.json()
+        return DeviceCode(
+            device_code=data["device_code"],
+            user_code=data["user_code"],
+            verification_uri=data["verification_uri"],
+            verification_uri_complete=data.get("verification_uri_complete")
+            or data["verification_uri"],
+            expires_in=int(data["expires_in"]),
+            interval=int(data.get("interval", 5)),
+        )
+    except (ValueError, KeyError, TypeError, AttributeError) as e:
+        raise BrowserSignInError("Unexpected answer from Jakarto.") from e
 
+
+# Whether a saved session is still good: accepted, refused (worth forgetting),
+# or unknown because Jakarto could not be asked.
+VALID = "valid"
+REJECTED = "rejected"
+UNKNOWN = "unknown"
 
 PENDING = "pending"
 SLOW_DOWN = "slow_down"
@@ -98,7 +111,11 @@ def poll(session: requests.Session, device_code: DeviceCode) -> str:
         return PENDING
     if error == "slow_down":
         return SLOW_DOWN
-    raise BrowserSignInError(_describe_error(response))
+    # Only these mean it will never be approved. A server error, a proxy's 429
+    # or a page that is not JSON is passing: keep waiting, the code is still good.
+    if error in _MESSAGES:
+        raise BrowserSignInError(_MESSAGES[error])
+    return PENDING
 
 
 @dataclass
@@ -138,7 +155,13 @@ def sign_out(session: requests.Session) -> None:
 def export_cookies(session: requests.Session) -> list:
     """The cookies to keep between QGIS sessions, as plain data for QSettings."""
     return [
-        {"name": c.name, "value": c.value, "domain": c.domain, "path": c.path}
+        {
+            "name": c.name,
+            "value": c.value,
+            "domain": c.domain,
+            "path": c.path,
+            "secure": bool(c.secure),
+        }
         for c in session.cookies
     ]
 
@@ -153,6 +176,9 @@ def restore_cookies(session: requests.Session, cookies) -> None:
                 c["value"],
                 domain=c.get("domain") or "",
                 path=c.get("path") or "/",
+                # Only ever sent over HTTPS; a __Secure- cookie is secure by name.
+                secure=bool(c.get("secure")) or c["name"].startswith("__Secure-"),
+                rest={"HttpOnly": None},
             )
 
 
@@ -166,9 +192,10 @@ _MESSAGES = {
 
 def _error_code(response: requests.Response) -> str | None:
     try:
-        return response.json().get("error")
+        data = response.json()
     except ValueError:
         return None
+    return data.get("error") if isinstance(data, dict) else None
 
 
 def _describe_error(response: requests.Response) -> str:

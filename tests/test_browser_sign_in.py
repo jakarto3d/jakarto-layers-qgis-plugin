@@ -6,7 +6,7 @@ from unittest.mock import Mock
 import pytest
 import requests
 
-from jakarto_layers_qgis import auth, browser_sign_in
+from jakarto_layers_qgis import auth, browser_sign_in, session_store
 from jakarto_layers_qgis.auth import BROWSER_SIGN_IN, JakartoAuthentication
 from jakarto_layers_qgis.browser_sign_in import BrowserSignInError
 
@@ -105,6 +105,9 @@ def settings(monkeypatch):
     mock.setValue.side_effect = values.__setitem__
     mock.remove.side_effect = lambda key: values.pop(key, None)
     monkeypatch.setattr(auth, "QSettings", Mock(return_value=mock))
+    # the session store reads the same settings
+    monkeypatch.setattr(session_store, "QSettings", Mock(return_value=mock))
+    monkeypatch.setattr(session_store, "_auth_database_ready", lambda: False)
     # no QGIS auth database: the legacy path, simplest to drive
     monkeypatch.setattr(
         JakartoAuthentication, "_is_auth_database_set", lambda self: False
@@ -226,3 +229,99 @@ def test_sign_out_also_forgets_a_saved_password(settings, monkeypatch):
     auth_manager.removeAuthenticationConfig.assert_called_once_with("cfg-1")
     # the address stays, to fill the form next time
     assert settings["jakartowns/username"] == "me@example.com"
+
+
+class HTTPErrorWith(requests.HTTPError):
+    def __init__(self, status):
+        super().__init__(str(status), response=FakeResponse(status, {}))
+
+
+def _token_raising(status):
+    def raise_(session, url):
+        raise HTTPErrorWith(status)
+
+    return raise_
+
+
+def test_a_refused_saved_session_is_forgotten_an_unreachable_one_kept(
+    settings, monkeypatch
+):
+    settings[browser_sign_in.SESSION_SETTING] = saved_session()
+    monkeypatch.setattr(auth, "_get_token", lambda **_: None)
+
+    monkeypatch.setattr(auth.browser_sign_in, "supabase_token", _token_raising(502))
+    JakartoAuthentication().setup_auth(ask=False)
+    assert browser_sign_in.SESSION_SETTING in settings  # a passing server error
+
+    monkeypatch.setattr(auth.browser_sign_in, "supabase_token", _token_raising(401))
+    JakartoAuthentication().setup_auth(ask=False)
+    assert browser_sign_in.SESSION_SETTING not in settings  # refused: not retried
+
+
+def test_a_session_whose_supabase_token_fails_is_ended_on_the_server(
+    settings, monkeypatch
+):
+    # Approved in the browser, then the token function fails: the account
+    # session just opened must not stay valid with nothing knowing about it.
+    class Dialog:
+        def __init__(self, session):
+            self.error = None
+
+        def exec(self):
+            return auth.QDialog.DialogCode.Accepted
+
+    monkeypatch.setattr(
+        "jakarto_layers_qgis.browser_sign_in_dialog.BrowserSignInDialog", Dialog
+    )
+    monkeypatch.setattr(auth.browser_sign_in, "supabase_token", _token_raising(500))
+    ended = []
+    monkeypatch.setattr(
+        auth.browser_sign_in, "sign_out", lambda session: ended.append(session)
+    )
+
+    assert JakartoAuthentication().sign_in_with_browser() is False
+    assert len(ended) == 1
+    assert browser_sign_in.SESSION_SETTING not in settings
+
+
+def test_sessions_honour_jakarto_verify_ssl(monkeypatch):
+    monkeypatch.setattr(auth, "verify_ssl", False)
+    assert auth._new_session().verify is False
+    monkeypatch.setattr(auth, "verify_ssl", True)
+    assert auth._new_session().verify is True
+
+
+def test_sign_out_leaves_nothing_of_the_signed_in_state(settings, monkeypatch):
+    monkeypatch.setattr(auth.browser_sign_in, "sign_out", lambda session: None)
+    users = []
+    monkeypatch.setattr(auth.sentry_sdk, "set_user", lambda user: users.append(user))
+    authentication = JakartoAuthentication()
+    authentication._jakarto_session = requests.Session()
+    authentication.user_id = "user-uuid"
+    authentication.access_token = "jwt"
+    authentication._refresh_token = "refresh"
+
+    authentication.sign_out()
+
+    assert authentication.user_id is None
+    assert authentication.access_token is None
+    assert authentication._refresh_token is None
+    assert users == [None]
+
+
+@pytest.mark.parametrize(
+    ("status", "payload"), [(500, {"error": "server_error"}), (502, None)]
+)
+def test_poll_keeps_waiting_through_a_passing_server_error(status, payload):
+    code = browser_sign_in.DeviceCode(**CODE)
+    session = FakeSession(FakeResponse(status, payload))
+
+    assert browser_sign_in.poll(session, code) == browser_sign_in.PENDING
+
+
+@pytest.mark.parametrize("payload", [{}, None, ["x"]])
+def test_an_unexpected_device_code_answer_is_a_clear_error(payload):
+    session = FakeSession(FakeResponse(200, payload))
+
+    with pytest.raises(BrowserSignInError, match="Unexpected answer"):
+        browser_sign_in.request_device_code(session)

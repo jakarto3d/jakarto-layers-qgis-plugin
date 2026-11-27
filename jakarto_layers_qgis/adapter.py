@@ -489,8 +489,11 @@ class Adapter(QObject):
             and not self._realtime_thread.isFinished()
         ):
             self._realtime_thread.quit()
-            self._realtime_thread.wait(300)  # milliseconds; the keyword is gone in Qt6
-            self._realtime_thread.deleteLater()
+            # milliseconds; the keyword is gone in Qt6
+            if self._realtime_thread.wait(300):
+                self._realtime_thread.deleteLater()
+            # Otherwise it is still unwinding: start_realtime connected its
+            # `finished` to deleteLater, so it goes once it has stopped.
 
         self._realtime_thread_event = None
 

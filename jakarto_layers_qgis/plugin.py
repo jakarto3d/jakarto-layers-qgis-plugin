@@ -14,7 +14,16 @@ from qgis.core import (
 )
 from qgis.gui import QgisInterface
 from qgis.PyQt import sip
-from qgis.PyQt.QtCore import QEvent, QObject, QPoint, Qt, QThread, QUrl, pyqtSignal
+from qgis.PyQt.QtCore import (
+    QCoreApplication,
+    QEvent,
+    QObject,
+    QPoint,
+    Qt,
+    QThread,
+    QUrl,
+    pyqtSignal,
+)
 from qgis.PyQt.QtGui import QDesktopServices, QIcon, QKeyEvent, QMouseEvent
 from qgis.PyQt.QtWidgets import (
     QAction,
@@ -58,6 +67,10 @@ class Plugin(QObject):
 
         self._auth = JakartoAuthentication()
         self._realtime_thread = QThread()
+        # Adapters signed out of while their realtime thread was still
+        # unwinding, kept alive until it finishes: a parentless QThread that
+        # Python drops while running takes QGIS down with it.
+        self._retired: list = []
 
         self._has_presence_point = False
 
@@ -205,6 +218,10 @@ class Plugin(QObject):
         return self._adapter
 
     def connect_auth(self, ask=True) -> bool:
+        # Called from the browser tree, which may not be the main thread: no
+        # sign-in window or timer there.
+        if ask and QThread.currentThread() is not QCoreApplication.instance().thread():
+            ask = False
         if not self._auth.setup_auth(ask=ask):
             return False
 
@@ -222,9 +239,50 @@ class Plugin(QObject):
         unloaded: without a session they could no longer stay in sync. A new
         adapter, with a new realtime thread, is ready for the next sign-in.
         """
+        if not self._settle_unsaved_edits():
+            return  # cancelled
         self._close_adapter()
         self._auth.sign_out()
         notify("Signed out of Jakarto.", duration=5)
+
+    def _settle_unsaved_edits(self) -> bool:
+        """Ask what to do with real-time layers that have unsaved changes, as
+        QGIS does when a layer is closed. False when the person cancels."""
+        adapter = self._adapter
+        if adapter is None:
+            return True
+        modified = [
+            layer.qgis_layer
+            for layer in adapter._loaded_layers.values()
+            if layer.qgis_layer_created()
+            and not sip.isdeleted(layer.qgis_layer)
+            and layer.qgis_layer.isEditable()
+            and layer.qgis_layer.isModified()
+        ]
+        if not modified:
+            return True
+        answer = QMessageBox.question(
+            iface.mainWindow(),
+            "Jakarto Real-Time Layers",
+            "Some real-time layers have unsaved changes. Save them before signing out?",
+            QMessageBox.StandardButton.Save
+            | QMessageBox.StandardButton.Discard
+            | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Save,
+        )
+        if answer == QMessageBox.StandardButton.Cancel:
+            return False
+        for qgis_layer in modified:
+            if answer == QMessageBox.StandardButton.Save:
+                if not qgis_layer.commitChanges():
+                    notify(
+                        f"Could not save {qgis_layer.name()}; still signed in.",
+                        level="warning",
+                    )
+                    return False
+            else:
+                qgis_layer.rollBack()
+        return True
 
     def _close_adapter(self) -> None:
         adapter = self._adapter
@@ -246,14 +304,22 @@ class Plugin(QObject):
                 with contextlib.suppress(TypeError, RuntimeError):
                     signal.disconnect(callback)
 
+        old_thread = self._realtime_thread
         adapter.close()
-        # stop_realtime() has the thread delete itself, and a QThread cannot be
-        # started twice anyway.
+        if not sip.isdeleted(old_thread) and old_thread.isRunning():
+            retired = (adapter, old_thread)
+            self._retired.append(retired)
+            old_thread.finished.connect(lambda: self._retire_done(retired))
+        # A QThread cannot be started twice.
         self._realtime_thread = QThread()
         self.on_has_presence_point(False)
         # Made now, from the menu action in the main thread, rather than on
         # demand from connect_auth, which can run elsewhere.
         _ = self.adapter
+
+    def _retire_done(self, retired) -> None:
+        if retired in self._retired:
+            self._retired.remove(retired)
 
     def on_has_presence_point(self, value: bool) -> None:
         self._has_presence_point = value
