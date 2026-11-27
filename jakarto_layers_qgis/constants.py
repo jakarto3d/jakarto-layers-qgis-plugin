@@ -57,33 +57,33 @@ geometry_postgis_to_alias = {v: k for k, v in geometry_types.items()}
 
 
 qmetatype_to_python: dict[QMetaType, str] = {
-    QMetaType.Bool: "bool",
-    QMetaType.Int: "int",
-    QMetaType.UInt: "int",
-    QMetaType.Double: "float",
-    QMetaType.QString: "str",
-    QMetaType.Long: "int",
-    QMetaType.LongLong: "int",
-    QMetaType.Short: "int",
-    QMetaType.ULong: "int",
-    QMetaType.ULongLong: "int",
-    QMetaType.UShort: "int",
-    QMetaType.Float: "float",
-    QMetaType.QDate: "date",
-    QMetaType.QTime: "time",
-    QMetaType.QDateTime: "datetime",
+    QMetaType.Type.Bool: "bool",
+    QMetaType.Type.Int: "int",
+    QMetaType.Type.UInt: "int",
+    QMetaType.Type.Double: "float",
+    QMetaType.Type.QString: "str",
+    QMetaType.Type.Long: "int",
+    QMetaType.Type.LongLong: "int",
+    QMetaType.Type.Short: "int",
+    QMetaType.Type.ULong: "int",
+    QMetaType.Type.ULongLong: "int",
+    QMetaType.Type.UShort: "int",
+    QMetaType.Type.Float: "float",
+    QMetaType.Type.QDate: "date",
+    QMetaType.Type.QTime: "time",
+    QMetaType.Type.QDateTime: "datetime",
 }
 
 python_to_qmetatype: dict[str, QMetaType | QVariant]
 if QGIS_VERSION_INT >= 33800:
     python_to_qmetatype = {
-        "bool": QMetaType.Bool,
-        "int": QMetaType.Int,
-        "float": QMetaType.Double,
-        "str": QMetaType.QString,
-        "date": QMetaType.QDate,
-        "time": QMetaType.QTime,
-        "datetime": QMetaType.QDateTime,
+        "bool": QMetaType.Type.Bool,
+        "int": QMetaType.Type.Int,
+        "float": QMetaType.Type.Double,
+        "str": QMetaType.Type.QString,
+        "date": QMetaType.Type.QDate,
+        "time": QMetaType.Type.QTime,
+        "datetime": QMetaType.Type.QDateTime,
     }
 else:
     # use QVariant if version is lower than 3.38

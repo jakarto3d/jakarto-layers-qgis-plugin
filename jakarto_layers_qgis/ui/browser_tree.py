@@ -3,14 +3,14 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import TYPE_CHECKING, Callable
 
-import sip
-from PyQt5.QtCore import QObject, pyqtSignal
 from qgis.core import (
     QgsDataCollectionItem,
     QgsDataItem,
     QgsDataItemProvider,
     QgsDataProvider,
 )
+from qgis.PyQt import sip
+from qgis.PyQt.QtCore import QObject, pyqtSignal
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QMenu
 

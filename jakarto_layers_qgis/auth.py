@@ -4,22 +4,30 @@ import time
 from dataclasses import dataclass
 
 import requests
-from PyQt5.QtCore import QObject, pyqtSignal
 from qgis.core import QgsApplication, QgsAuthMethodConfig
-from qgis.PyQt.QtCore import QSettings, QTimer
+from qgis.PyQt.QtCore import QObject, QSettings, QTimer, pyqtSignal
 from qgis.PyQt.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QLabel,
     QLineEdit,
+    QPushButton,
     QVBoxLayout,
 )
 
-from .constants import anon_key, auth_url, verify_ssl
+from . import browser_sign_in, session_store
+from .constants import anon_key, auth_url, supabase_url, verify_ssl
 from .messages import log
 from .vendor import sentry_sdk
 
 AUTH_CONFIG_ID_KEY = "jakarto_auth_config_id"
+
+
+class _BrowserSignInRequested:
+    """Returned by _ask_credentials when the person chose the browser."""
+
+
+BROWSER_SIGN_IN = _BrowserSignInRequested()
 
 
 class JakartoAuthentication(QObject):
@@ -33,6 +41,8 @@ class JakartoAuthentication(QObject):
         self.user_id: str | None = None
         self.access_token: str | None = None
         self._refresh_token: str | None = None
+        # set after a browser sign-in: Supabase tokens are fetched with it
+        self._jakarto_session: requests.Session | None = None
 
         self._qsettings = QSettings("Jakarto", "JakartoPlugin")
 
@@ -66,6 +76,10 @@ class JakartoAuthentication(QObject):
         if self.is_authenticated():
             return True
 
+        # a browser sign-in made earlier, here or in plugin-qgis
+        if self._restore_browser_session():
+            return True
+
         if self._is_auth_database_set():
             # store credentials in auth database
             username, password = self._get_credentials_from_auth_database()
@@ -81,6 +95,10 @@ class JakartoAuthentication(QObject):
             if ask:
                 while True:
                     username, password = _ask_credentials(in_qsettings=False)
+                    if username is BROWSER_SIGN_IN:
+                        if self.sign_in_with_browser():
+                            return True
+                        continue
                     if username is None or password is None:
                         break
                     if self._check_auth(username, password):
@@ -97,6 +115,10 @@ class JakartoAuthentication(QObject):
             if ask:
                 while True:
                     username, password = _ask_credentials(in_qsettings=True)
+                    if username is BROWSER_SIGN_IN:
+                        if self.sign_in_with_browser():
+                            return True
+                        continue
                     if username is None or password is None:
                         break
                     if self._check_auth(username, password):
@@ -118,6 +140,7 @@ class JakartoAuthentication(QObject):
             return False
 
         sentry_sdk.set_user({"email": username})
+        self._jakarto_session = None
         self.user_id = token_response.user_id
         self.access_token = token_response.access_token
         self._refresh_token = token_response.refresh_token
@@ -127,7 +150,125 @@ class JakartoAuthentication(QObject):
 
         return True
 
+    def sign_in_with_browser(self) -> bool:
+        """Sign in through the browser. Return False if cancelled or refused."""
+        # imported here: the dialog needs a running QApplication
+        from .browser_sign_in_dialog import BrowserSignInDialog
+
+        session = _new_session()
+        dialog = BrowserSignInDialog(session)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            if dialog.error:
+                log(f"Browser sign-in failed: {dialog.error}")
+            return False
+        if self._use_browser_session(session) != browser_sign_in.VALID:
+            # The account session was just opened on the server: end it rather
+            # than leave it valid with nothing on this side knowing about it.
+            browser_sign_in.sign_out(session)
+            return False
+        # A browser sign-in saved earlier is replaced: end it on the server.
+        self._end_saved_browser_session()
+        # kept so the next QGIS session does not ask again; shared with plugin-qgis
+        session_store.save(browser_sign_in.export_cookies(session))
+        log("Signed in with the browser")
+        return True
+
+    def sign_out(self) -> None:
+        """Sign out of Jakarto, here and in plugin-qgis.
+
+        Ends a browser sign-in and forgets a saved password too: otherwise the
+        next connection would quietly sign in again with it, and signing out
+        would seem to do nothing. The email address is kept, to fill the form.
+        Both plugins keep the password under the same QSettings key.
+        """
+        if self._jakarto_session is not None:
+            browser_sign_in.sign_out(self._jakarto_session)
+        else:
+            # a browser sign-in saved by plugin-qgis, or before this password one
+            self._end_saved_browser_session()
+        session_store.clear()
+        self._jakarto_session = None
+        self.user_id = None
+        self.access_token = None
+        self._refresh_token = None
+        self._username = None
+        self._password = None
+        self._refresh_token_timer.stop()
+        sentry_sdk.set_user(None)
+        self._forget_saved_password()
+
+    def _forget_saved_password(self) -> None:
+        self._qsettings.remove("jakartowns/password")
+        authcfg = self._get_auth_config_id()
+        if authcfg:
+            auth_mgr = QgsApplication.authManager()
+            if authcfg in auth_mgr.configIds():
+                auth_mgr.removeAuthenticationConfig(authcfg)
+            self._qsettings.remove(AUTH_CONFIG_ID_KEY)
+
+    def _restore_browser_session(self) -> bool:
+        cookies = session_store.load()
+        if not cookies:
+            return False
+        session = _new_session()
+        browser_sign_in.restore_cookies(session, cookies)
+        state = self._use_browser_session(session)
+        if state == browser_sign_in.VALID:
+            log("Using the browser sign-in")
+            return True
+        # Forgotten only when refused: a network hiccup must not sign anyone
+        # out, and an expired session must not be retried on every action.
+        if state == browser_sign_in.REJECTED:
+            session_store.clear()
+        return False
+
+    def _end_saved_browser_session(self) -> None:
+        """End the saved browser sign-in on the server, then forget it."""
+        cookies = session_store.load()
+        if cookies:
+            session = _new_session()
+            browser_sign_in.restore_cookies(session, cookies)
+            browser_sign_in.sign_out(session)
+        session_store.clear()
+
+    def _use_browser_session(self, session: requests.Session) -> str:
+        """Take Supabase access from a Jakarto session: VALID, REJECTED (the
+        session is no longer accepted) or UNKNOWN (Jakarto could not be asked)."""
+        try:
+            token = browser_sign_in.supabase_token(session, supabase_url)
+        except requests.HTTPError as e:
+            status = e.response.status_code if e.response is not None else None
+            log(f"The Jakarto session was not accepted for Supabase: {e}")
+            return (
+                browser_sign_in.REJECTED
+                if status in (401, 403)
+                else browser_sign_in.UNKNOWN
+            )
+        except (requests.RequestException, KeyError, ValueError) as e:
+            log(f"Could not get a Supabase token from the Jakarto session: {e}")
+            return browser_sign_in.UNKNOWN
+        self._jakarto_session = session
+        self._refresh_token = None
+        self.user_id = token.user_id
+        self.access_token = token.access_token
+
+        self.access_token_updated.emit()
+        self._refresh_token_timer.start()
+        return browser_sign_in.VALID
+
     def refresh_access_token(self) -> bool:
+        if self._jakarto_session is not None:
+            try:
+                token = browser_sign_in.supabase_token(
+                    self._jakarto_session, supabase_url
+                )
+            except (requests.RequestException, KeyError, ValueError) as e:
+                log(f"Could not refresh the Supabase token: {e}")
+                return False
+            self.access_token = token.access_token
+            self.access_token_updated.emit()
+            self._refresh_token_timer.start()
+            return True
         if self._refresh_token is None:
             return False
         token_response = _get_token(refresh_token=self._refresh_token, session=None)
@@ -235,7 +376,9 @@ def _ask_credentials(
         title="Jakarto Authentication",
         description=description,
     )
-    if dialog.exec_() == QDialog.Accepted:
+    if dialog.exec() == QDialog.DialogCode.Accepted:
+        if dialog.browser_requested:
+            return BROWSER_SIGN_IN, None
         username = dialog.username_edit.text()
         password = dialog.password_edit.text()
         return username, password
@@ -247,7 +390,14 @@ class _AuthDialog(QDialog):
         super().__init__()
         self.username_edit = QLineEdit()
         self.password_edit = QLineEdit()
-        self.password_edit.setEchoMode(QLineEdit.Password)
+        self.password_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.browser_requested = False
+        self.browser_button = QPushButton("Sign in with your browser")
+        self.browser_button.clicked.connect(self._request_browser)
+
+    def _request_browser(self) -> None:
+        self.browser_requested = True
+        self.accept()
 
 
 def _make_auth_dialog(
@@ -265,12 +415,25 @@ def _make_auth_dialog(
     username_label = QLabel(username_label)
     password_label = QLabel(password_label)
 
-    button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+    button_box = QDialogButtonBox(
+        QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+    )
     button_box.accepted.connect(dialog.accept)
     button_box.rejected.connect(dialog.reject)
 
     description_label = QLabel(description)
 
+    browser_label = QLabel(
+        "Recommended, and required if two-factor authentication is on for your "
+        "account or if you sign in with Google. Your password is never given to "
+        "the plugin."
+    )
+    browser_label.setWordWrap(True)
+    password_title = QLabel("Or with your email and password:")
+
+    layout.addWidget(browser_label)
+    layout.addWidget(dialog.browser_button)
+    layout.addWidget(password_title)
     layout.addWidget(description_label)
     layout.addWidget(username_label)
     layout.addWidget(dialog.username_edit)
@@ -281,6 +444,13 @@ def _make_auth_dialog(
     dialog.setLayout(layout)
 
     return dialog
+
+
+def _new_session() -> requests.Session:
+    session = requests.Session()
+    # JAKARTO_VERIFY_SSL=false, honoured like every other request of the plugin
+    session.verify = verify_ssl
+    return session
 
 
 @dataclass

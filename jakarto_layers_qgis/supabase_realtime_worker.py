@@ -4,7 +4,7 @@ import threading
 import time
 import uuid
 
-from PyQt5.QtCore import QObject, pyqtSignal
+from qgis.PyQt.QtCore import QObject, pyqtSignal
 
 from .auth import JakartoAuthentication
 from .constants import anon_key, realtime_url

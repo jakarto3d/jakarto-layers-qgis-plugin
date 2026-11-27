@@ -205,7 +205,7 @@ def test_create_sub_layer_3_features(
     dialog = Mock(
         return_value=Mock(
             spec=CreateSubLayerDialog,
-            exec_=Mock(return_value=QDialog.DialogCode.Accepted),
+            exec=Mock(return_value=QDialog.DialogCode.Accepted),
             properties=props,
         )
     )
@@ -481,3 +481,106 @@ def test_drop_layer(plugin, add_layer: Layer, mock_session):
     assert request.method == "DELETE"
     assert request.url == f"{supabase_url}/rest/v1/layers"
     assert request.params["id"] == f"eq.{add_layer.supabase_layer_id}"
+
+
+def test_sign_out_cuts_the_connections(plugin, add_layer: Layer, monkeypatch):
+    old_adapter = plugin.adapter
+    old_thread = plugin._realtime_thread
+    close = Mock(wraps=old_adapter.close)
+    monkeypatch.setattr(old_adapter, "close", close)
+    qgis_layer_id = add_layer.qgis_layer.id()
+    monkeypatch.setattr(jakarto_layers_qgis.plugin, "notify", Mock())
+
+    plugin.sign_out()
+
+    # the realtime connection and the session are closed, and the layers they
+    # kept in sync are off the map
+    close.assert_called_once()
+    plugin._auth.sign_out.assert_called_once()
+    assert QgsProject.instance().mapLayer(qgis_layer_id) is None
+    # a new adapter is ready for the next sign-in, on a new thread that can
+    # start, and the next start reaches it rather than the closed one
+    new_adapter = plugin._adapter
+    assert new_adapter is not None and new_adapter is not old_adapter
+    assert plugin._realtime_thread is not old_thread
+    assert new_adapter._realtime_thread is plugin._realtime_thread
+    assert (plugin.start_realtime_signal, new_adapter.start_realtime) in plugin._signals
+    assert (
+        plugin.start_realtime_signal,
+        old_adapter.start_realtime,
+    ) not in plugin._signals
+
+
+def _modify(layer: Layer) -> None:
+    qgis_layer = layer.qgis_layer
+    qgis_layer.startEditing()
+    feature = next(qgis_layer.getFeatures())
+    qgis_layer.deleteFeature(feature.id())
+    assert qgis_layer.isModified()
+
+
+def test_sign_out_with_unsaved_edits_can_be_cancelled(
+    plugin, add_layer: Layer, monkeypatch
+):
+    _modify(add_layer)
+    monkeypatch.setattr(
+        jakarto_layers_qgis.plugin.QMessageBox,
+        "question",
+        Mock(return_value=QMessageBox.StandardButton.Cancel),
+    )
+    adapter = plugin._adapter
+
+    plugin.sign_out()
+
+    # nothing happened: still signed in, the edits still there
+    assert plugin._adapter is adapter
+    plugin._auth.sign_out.assert_not_called()
+    assert add_layer.qgis_layer.isModified()
+    add_layer.qgis_layer.rollBack()
+
+
+def test_sign_out_with_unsaved_edits_can_discard_them(
+    plugin, add_layer: Layer, monkeypatch
+):
+    _modify(add_layer)
+    qgis_layer = add_layer.qgis_layer
+    rolled_back = []
+    monkeypatch.setattr(
+        qgis_layer, "rollBack", lambda *a: rolled_back.append(True) or True
+    )
+    monkeypatch.setattr(
+        jakarto_layers_qgis.plugin.QMessageBox,
+        "question",
+        Mock(return_value=QMessageBox.StandardButton.Discard),
+    )
+    monkeypatch.setattr(jakarto_layers_qgis.plugin, "notify", Mock())
+
+    plugin.sign_out()
+
+    assert rolled_back == [True]
+    plugin._auth.sign_out.assert_called_once()
+
+
+def test_sign_out_keeps_a_still_running_realtime_thread_alive(plugin, monkeypatch):
+    # The worker can take longer than stop_realtime's 300 ms to unwind; a
+    # parentless QThread dropped while running aborts QGIS.
+    import time
+
+    from qgis.PyQt.QtCore import QCoreApplication, QThread
+
+    class Slow(QThread):
+        def run(self):
+            time.sleep(0.8)
+
+    slow = Slow()
+    plugin._realtime_thread = slow
+    plugin.adapter._realtime_thread = slow
+    slow.start()
+    monkeypatch.setattr(jakarto_layers_qgis.plugin, "notify", Mock())
+
+    plugin.sign_out()
+
+    assert any(thread is slow for _, thread in plugin._retired)
+    slow.wait()
+    QCoreApplication.processEvents()
+    assert not any(thread is slow for _, thread in plugin._retired)
